@@ -5,6 +5,8 @@ __pycache__/
 desktop.ini
 outputs/
 data/crops/unlabelled/
+data/split_dataset_candidate/
+data/split_color_candidate/
 /yolov8n.pt
 *.pt.bak
 .idea/

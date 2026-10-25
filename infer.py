@@ -26,6 +26,7 @@ from pipeline import (  # noqa: E402
     format_answer_line,
     resolve_image_path,
 )
+from config import BRAND_MODEL_PATH  # noqa: E402
 
 
 def print_predictions(image_name: str, predictions: list[dict]) -> None:
@@ -36,12 +37,21 @@ def print_predictions(image_name: str, predictions: list[dict]) -> None:
     for item in predictions:
         print(f"{item['brand']} — {item['colour']}")
 
-def run_image(pipeline: CarPipeline, image_path: Path, save_annotated: bool) -> None:
+def run_image(
+    pipeline: CarPipeline,
+    image_path: Path,
+    save_annotated: bool,
+    already_cropped: bool = False,
+) -> None:
     if not image_path.is_file():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
     image = Image.open(image_path).convert("RGB")
-    predictions = pipeline.predict_image(image)
+    predictions = (
+        pipeline.predict_crop(image)
+        if already_cropped
+        else pipeline.predict_image(image)
+    )
     print_predictions(image_path.name, predictions)
 
     if save_annotated:
@@ -110,6 +120,17 @@ def main() -> None:
         help="Open this camera index instead of a file (phone-as-webcam).",
     )
     parser.add_argument(
+        "--brand-model",
+        type=Path,
+        default=BRAND_MODEL_PATH,
+        help="Brand checkpoint to use (defaults to the current stable model).",
+    )
+    parser.add_argument(
+        "--crop",
+        action="store_true",
+        help="Classify one already-cropped car without running YOLO.",
+    )
+    parser.add_argument(
         "--save-annotated",
         action="store_true",
         help="Save a boxed preview under outputs/.",
@@ -118,9 +139,17 @@ def main() -> None:
 
     if args.image is None and args.camera is None:
         parser.error("Provide an image path or --camera 0")
+    if args.crop and args.camera is not None:
+        parser.error("--crop can only be used with a saved image, not --camera.")
 
-    print("Loading models (offline after the first YOLO download)...")
-    pipeline = CarPipeline()
+    if args.crop:
+        print("Loading models for cropped-image inference...")
+    else:
+        print("Loading models (offline after the first YOLO download)...")
+    pipeline = CarPipeline(
+        brand_model_path=args.brand_model,
+        load_vehicle_detector=not args.crop,
+    )
     print(
         f"Brand classes ({len(pipeline.brand_names)}): "
         + ", ".join(pipeline.brand_names)
@@ -132,7 +161,12 @@ def main() -> None:
         run_camera(pipeline, args.camera, args.save_annotated)
         return
 
-    run_image(pipeline, resolve_image_path(args.image), args.save_annotated)
+    run_image(
+        pipeline,
+        resolve_image_path(args.image),
+        args.save_annotated,
+        already_cropped=args.crop,
+    )
 
 
 if __name__ == "__main__":

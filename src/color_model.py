@@ -11,18 +11,39 @@ from PIL import Image
 from torch import nn
 from torchvision import models, transforms
 
-from config import COLOR_MODEL_PATH, COLOR_NAMES_PATH, COLOUR_NAMES, IMAGE_SIZE
+from config import (
+    COLOR_MODEL_CONFIDENCE,
+    COLOR_MODEL_PATH,
+    COLOR_NAMES_PATH,
+    COLOUR_ALIASES,
+    COLOUR_NAMES,
+    IMAGE_SIZE,
+)
 
 
-def build_color_model(number_of_classes: int = 8) -> nn.Module:
+def build_color_model(number_of_classes: int | None = None) -> nn.Module:
+    if number_of_classes is None:
+        number_of_classes = len(COLOUR_NAMES)
     model = models.mobilenet_v3_small(weights=None)
     input_features = model.classifier[3].in_features
     model.classifier[3] = nn.Linear(input_features, number_of_classes)
     return model
 
 
-def color_transform() -> transforms.Compose:
-    return transforms.Compose(
+def color_transform(training: bool = False) -> transforms.Compose:
+    operations = []
+    if training:
+        operations.extend(
+            [
+                transforms.RandomHorizontalFlip(),
+                transforms.ColorJitter(
+                    brightness=0.2,
+                    contrast=0.2,
+                    saturation=0.15,
+                ),
+            ]
+        )
+    operations.extend(
         [
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.ToTensor(),
@@ -32,6 +53,7 @@ def color_transform() -> transforms.Compose:
             ),
         ]
     )
+    return transforms.Compose(operations)
 
 
 def load_color_model(model_path: Path | None = None, device: torch.device | None = None):
@@ -70,8 +92,8 @@ def load_color_model(model_path: Path | None = None, device: torch.device | None
 
 def _body_roi(bgr: np.ndarray) -> np.ndarray:
     height, width = bgr.shape[:2]
-    y1, y2 = int(height * 0.30), int(height * 0.82)
-    x1, x2 = int(width * 0.12), int(width * 0.88)
+    y1, y2 = int(height * 0.32), int(height * 0.76)
+    x1, x2 = int(width * 0.15), int(width * 0.85)
     crop = bgr[y1:y2, x1:x2]
     if crop.size == 0:
         return bgr
@@ -79,11 +101,10 @@ def _body_roi(bgr: np.ndarray) -> np.ndarray:
 
 
 def hsv_colour(crop: Image.Image) -> str:
-    """Name one of the eight exam colours from the car body region.
+    """Map HSV paint pixels in the central body region to an exam colour.
 
-    The method is not learned: it votes over HSV pixels after dropping
-    windshield-like and glare pixels. Lighting still causes mistakes,
-    which is why a trained colour model is preferred once crops are labelled.
+    Maroon maps to red, orange to yellow, silver to grey, and beige/gold to
+    brown so predictions remain within the exam's eight scored classes.
     """
 
     bgr = cv2.cvtColor(np.array(crop.convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -93,9 +114,7 @@ def hsv_colour(crop: Image.Image) -> str:
     hue = hsv[:, :, 0].astype(np.int32).ravel()
     saturation = hsv[:, :, 1].astype(np.int32).ravel()
     value = hsv[:, :, 2].astype(np.int32).ravel()
-
-    # Drop extreme shadows and specular highlights.
-    usable = (value >= 25) & (value <= 245)
+    usable = value >= 20
     if not np.any(usable):
         usable = np.ones_like(value, dtype=bool)
 
@@ -103,43 +122,43 @@ def hsv_colour(crop: Image.Image) -> str:
     saturation = saturation[usable]
     value = value[usable]
 
-    chromatic = saturation >= 45
-    if np.mean(chromatic) < 0.18:
-        median_value = float(np.median(value))
-        median_saturation = float(np.median(saturation))
-        if median_value < 55:
-            return "black"
-        if median_value > 175 and median_saturation < 40:
-            return "white"
-        if median_value < 95:
-            return "black"
-        return "grey"
-
     def bucket(h: int, s: int, v: int) -> str:
-        if s < 40:
+        if s < 35:
             if v < 55:
                 return "black"
-            if v > 175:
+            if v >= 215:
                 return "white"
+            if 10 <= h <= 36 and s >= 12 and v > 130:
+                return "beige"
+            if v > 165:
+                return "silver"
             return "grey"
+        if h <= 8 or h >= 170:
+            return "maroon" if v < 120 else "red"
+        if 9 <= h <= 25 and s >= 100:
+            if h >= 20 and v < 225:
+                return "gold"
+            return "orange"
+        if 9 <= h <= 36:
+            return "gold" if s >= 35 else "beige"
         if v < 40:
             return "black"
-        if h <= 8 or h >= 170:
-            return "red"
-        if h <= 18:
-            return "brown"
-        if h <= 34:
-            return "yellow"
         if h <= 85:
             return "green"
         if h <= 135:
             return "blue"
-        return "brown"
+        if h <= 169:
+            return "purple"
+        return "maroon"
 
-    votes = [bucket(int(h), int(s), int(v)) for h, s, v in zip(hue, saturation, value)]
+    votes = []
+    for h, s, v in zip(hue, saturation, value):
+        name = bucket(int(h), int(s), int(v))
+        votes.append(COLOUR_ALIASES.get(name, name))
     counts = {name: 0 for name in COLOUR_NAMES}
     for name in votes:
-        counts[name] += 1
+        if name in counts:
+            counts[name] += 1
     return max(counts, key=counts.get)
 
 
@@ -151,7 +170,7 @@ def predict_color(
     device=None,
 ) -> tuple[str, float]:
     if model is None:
-        return hsv_colour(crop), 1.0
+        return hsv_colour(crop), 0.0
 
     image_tensor = image_transform(crop.convert("RGB")).unsqueeze(0).to(device)
     with torch.no_grad():
@@ -162,4 +181,7 @@ def predict_color(
     colour = class_names[int(predicted_index.item())].lower()
     if colour == "gray":
         colour = "grey"
-    return colour, float(confidence.item())
+    confidence_value = float(confidence.item())
+    if confidence_value < COLOR_MODEL_CONFIDENCE:
+        return hsv_colour(crop), 0.0
+    return colour, confidence_value

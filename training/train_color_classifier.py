@@ -6,28 +6,26 @@ white, black, grey, red, blue, green, brown, yellow.
 
 from __future__ import annotations
 
-import json
 import random
-import shutil
 import sys
 from pathlib import Path
 
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from torchvision import datasets, models, transforms
+from torchvision import datasets, models
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = PROJECT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from config import (  # noqa: E402
+    COLOR_CANDIDATE_MODEL_PATH,
     COLOR_DATASET_DIR,
     COLOUR_NAMES,
-    IMAGE_SIZE,
-    MODELS_DIR,
     SPLIT_COLOR_DIR,
 )
+from color_model import color_transform  # noqa: E402
 
 BATCH_SIZE = 16
 EPOCHS = 10
@@ -42,7 +40,9 @@ def split_color_dataset() -> None:
         )
 
     if SPLIT_COLOR_DIR.exists():
-        shutil.rmtree(SPLIT_COLOR_DIR)
+        raise FileExistsError(
+            f"Refusing to overwrite existing colour split directory: {SPLIT_COLOR_DIR}"
+        )
 
     random.seed(42)
     from config import IMAGE_EXTENSIONS
@@ -75,29 +75,23 @@ def split_color_dataset() -> None:
 
 
 def main() -> None:
+    if COLOR_CANDIDATE_MODEL_PATH.exists():
+        raise FileExistsError(
+            f"Refusing to overwrite candidate weights: {COLOR_CANDIDATE_MODEL_PATH}"
+        )
+    torch.set_num_threads(min(4, torch.get_num_threads()))
     split_color_dataset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
 
-    train_transform = transforms.Compose(
-        [
-            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.15),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
+    train_dataset = datasets.ImageFolder(
+        SPLIT_COLOR_DIR / "train",
+        transform=color_transform(training=True),
     )
-    val_transform = transforms.Compose(
-        [
-            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
+    val_dataset = datasets.ImageFolder(
+        SPLIT_COLOR_DIR / "val",
+        transform=color_transform(),
     )
-
-    train_dataset = datasets.ImageFolder(SPLIT_COLOR_DIR / "train", transform=train_transform)
-    val_dataset = datasets.ImageFolder(SPLIT_COLOR_DIR / "val", transform=val_transform)
     class_names = train_dataset.classes
     print("Colours:", class_names)
 
@@ -145,17 +139,15 @@ def main() -> None:
         )
         if val_accuracy >= best_val:
             best_val = val_accuracy
-            MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            COLOR_CANDIDATE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
                     "class_names": class_names,
                     "architecture": "mobilenet_v3_small_color",
                 },
-                MODELS_DIR / "car_color_classifier.pth",
+                COLOR_CANDIDATE_MODEL_PATH,
             )
-            with open(MODELS_DIR / "color_names.json", "w", encoding="utf-8") as file:
-                json.dump(class_names, file, indent=2)
             print("  saved best colour checkpoint")
 
     print(f"Best colour validation accuracy: {best_val:.1%}")
