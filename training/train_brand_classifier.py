@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from collections import Counter
 from pathlib import Path
@@ -10,13 +9,18 @@ from pathlib import Path
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from torchvision import datasets, models, transforms
+from torchvision import datasets, models
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = PROJECT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from config import IMAGE_SIZE, MODELS_DIR, SPLIT_BRAND_DIR  # noqa: E402
+from brand_model import brand_transform  # noqa: E402
+from config import (  # noqa: E402
+    BRAND_CANDIDATE_MODEL_PATH,
+    IMAGE_SIZE,
+    SPLIT_BRAND_DIR,
+)
 
 BATCH_SIZE = 16
 EPOCHS = 12
@@ -98,39 +102,38 @@ def run_epoch(model, loader, criterion, optimizer, device, train: bool) -> tuple
 
 
 def main() -> None:
+    if BRAND_CANDIDATE_MODEL_PATH.exists():
+        raise FileExistsError(
+            f"Refusing to overwrite candidate weights: {BRAND_CANDIDATE_MODEL_PATH}"
+        )
+
+    torch.set_num_threads(min(4, torch.get_num_threads()))
     device = get_device()
     print("Device:", device)
+    print("Torch CPU threads:", torch.get_num_threads())
 
-    train_transform = transforms.Compose(
-        [
-            transforms.Resize((IMAGE_SIZE + 32, IMAGE_SIZE + 32)),
-            transforms.RandomResizedCrop(IMAGE_SIZE, scale=(0.7, 1.0)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.02),
-            transforms.RandomRotation(12),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            transforms.RandomErasing(p=0.15),
-        ]
+    train_dataset = datasets.ImageFolder(
+        SPLIT_BRAND_DIR / "train",
+        transform=brand_transform(training=True),
     )
-    val_transform = transforms.Compose(
-        [
-            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
+    val_dataset = datasets.ImageFolder(
+        SPLIT_BRAND_DIR / "val",
+        transform=brand_transform(),
     )
-
-    train_dataset = datasets.ImageFolder(SPLIT_BRAND_DIR / "train", transform=train_transform)
-    val_dataset = datasets.ImageFolder(SPLIT_BRAND_DIR / "val", transform=val_transform)
     if train_dataset.classes != val_dataset.classes:
         raise ValueError("Train and val class folders do not match.")
+    if not train_dataset or not val_dataset:
+        raise ValueError(
+            f"Brand split must contain training and validation images: {SPLIT_BRAND_DIR}"
+        )
 
     class_names = train_dataset.classes
     print("Brands:", class_names)
     print("Train images:", len(train_dataset))
     print("Val images:", len(val_dataset))
     print("Per-class train counts:", dict(zip(class_names, class_counts(train_dataset))))
+    if any(count == 0 for count in class_counts(train_dataset)):
+        raise ValueError("Every included brand must have at least one training image.")
 
     train_loader = make_loader(train_dataset, BATCH_SIZE, train=True)
     val_loader = make_loader(val_dataset, BATCH_SIZE, train=False)
@@ -140,7 +143,7 @@ def main() -> None:
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.classifier.parameters(), lr=HEAD_LEARNING_RATE)
 
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    BRAND_CANDIDATE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     best_val_accuracy = 0.0
     unfrozen = False
 
@@ -177,13 +180,11 @@ def main() -> None:
                 "image_size": IMAGE_SIZE,
                 "val_accuracy": val_accuracy,
             }
-            torch.save(checkpoint, MODELS_DIR / "car_brand_classifier.pth")
-            with open(MODELS_DIR / "class_names.json", "w", encoding="utf-8") as file:
-                json.dump(class_names, file, indent=2)
+            torch.save(checkpoint, BRAND_CANDIDATE_MODEL_PATH)
             print("  saved best checkpoint")
 
     print(f"\nBest validation accuracy: {best_val_accuracy:.1%}")
-    print("Model saved in:", MODELS_DIR / "car_brand_classifier.pth")
+    print("Candidate model saved in:", BRAND_CANDIDATE_MODEL_PATH)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,11 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = PROJECT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from config import BRAND_DATASET_DIR, IMAGE_EXTENSIONS, SPLIT_BRAND_DIR  # noqa: E402
+from config import (  # noqa: E402
+    BRAND_DATASET_DIR,
+    IMAGE_EXTENSIONS,
+    SPLIT_BRAND_DIR,
+)
 
 random.seed(42)
 VALIDATION_RATIO = 0.20
@@ -53,7 +57,9 @@ def main() -> None:
         raise SystemExit("Need at least two brands with enough images.")
 
     if SPLIT_BRAND_DIR.exists():
-        shutil.rmtree(SPLIT_BRAND_DIR)
+        raise FileExistsError(
+            f"Refusing to overwrite existing split directory: {SPLIT_BRAND_DIR}"
+        )
 
     for brand, images in brands.items():
         random.shuffle(images)

@@ -15,14 +15,18 @@ from detect import crop_box, detect_cars, load_detector
 
 
 class CarPipeline:
-    def __init__(self):
-        self.detector = load_detector()
+    def __init__(
+        self,
+        brand_model_path: Path | None = None,
+        load_vehicle_detector: bool = True,
+    ):
+        self.detector = load_detector() if load_vehicle_detector else None
         (
             self.brand_model,
             self.brand_names,
             self.brand_transform,
             self.device,
-        ) = load_brand_model()
+        ) = load_brand_model(model_path=brand_model_path)
         (
             self.color_model,
             self.color_names,
@@ -33,35 +37,56 @@ class CarPipeline:
             self.device = color_device
 
     def predict_image(self, image: Image.Image) -> list[dict]:
+        if self.detector is None:
+            raise RuntimeError("Vehicle detection was disabled for this pipeline.")
         cars = detect_cars(image, self.detector)
         predictions = []
         for car in cars:
             crop = crop_box(image, car["box"])
-            brand, brand_confidence = predict_brand(
-                crop,
-                self.brand_model,
-                self.brand_names,
-                self.brand_transform,
-                self.device,
-            )
-            colour, colour_confidence = predict_color(
-                crop,
-                self.color_model,
-                self.color_names,
-                self.color_transform,
-                self.device,
-            )
             predictions.append(
-                {
-                    "brand": brand,
-                    "colour": colour,
-                    "brand_confidence": brand_confidence,
-                    "colour_confidence": colour_confidence,
-                    "detect_confidence": car["detect_confidence"],
-                    "box": car["box"],
-                }
+                self._predict_crop(crop, car["box"], car["detect_confidence"])
             )
         return predictions
+
+    def predict_crop(self, crop: Image.Image) -> list[dict]:
+        """Classify an already-cropped single car without invoking YOLO."""
+
+        return [
+            self._predict_crop(
+                crop,
+                (0, 0, crop.width, crop.height),
+                1.0,
+            )
+        ]
+
+    def _predict_crop(
+        self,
+        crop: Image.Image,
+        box: tuple[int, int, int, int],
+        detect_confidence: float,
+    ) -> dict:
+        brand, brand_confidence = predict_brand(
+            crop,
+            self.brand_model,
+            self.brand_names,
+            self.brand_transform,
+            self.device,
+        )
+        colour, colour_confidence = predict_color(
+            crop,
+            self.color_model,
+            self.color_names,
+            self.color_transform,
+            self.device,
+        )
+        return {
+            "brand": brand,
+            "colour": colour,
+            "brand_confidence": brand_confidence,
+            "colour_confidence": colour_confidence,
+            "detect_confidence": detect_confidence,
+            "box": box,
+        }
 
     def predict_path(self, image_path: Path) -> list[dict]:
         image = Image.open(image_path).convert("RGB")

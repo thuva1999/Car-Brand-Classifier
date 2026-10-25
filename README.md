@@ -6,7 +6,7 @@ Architecture (keep this design; do not share it with other teams):
 
 1. **YOLOv8n** pretrained on COCO finds cars and trucks (detector only).
 2. Each crop goes through **MobileNetV3-Small** fine-tuned on our brand folders.
-3. Colour is predicted on the same crop: a trained 8-class MobileNetV3-Small if `models/car_color_classifier.pth` exists, otherwise **HSV voting** on the car body (allowed by the brief).
+3. Colour is predicted on the same crop: a trained 8-class MobileNetV3-Small when its confidence is at least 0.70; otherwise **HSV voting** on the central car-body region (allowed by the brief).
 4. Small or low-confidence boxes are dropped. Low brand confidence becomes `unknown` so colour can still score.
 
 ## Live test (test day)
@@ -18,6 +18,22 @@ cd "Car Brand Classifier"
 venv\Scripts\activate
 python infer.py path\to\photo.jpg
 ```
+
+The default inference checkpoint is the validated `car_brand_classifier_candidate_v2.pth`. The previous model remains available as `car_brand_classifier.pth`.
+
+To select a specific brand checkpoint:
+
+```bat
+python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier.pth
+```
+
+For a single image that is already cropped to one car, skip YOLO explicitly:
+
+```bat
+python infer.py data\brand_dataset\BYD\image.png --crop
+```
+
+Normal street photos should not use `--crop`; YOLO is required to find and crop each vehicle.
 
 You can also pass a photo's filename by itself if it is stored somewhere under
 `data\`; if that filename occurs more than once, pass the full path instead.
@@ -51,7 +67,8 @@ The first detector run may download `yolov8n.pt`. Copy it into `models\yolov8n.p
 
 Weights:
 
-- `models/car_brand_classifier.pth` — required
+- `models/car_brand_classifier_candidate_v2.pth` — active brand model
+- `models/car_brand_classifier.pth` — previous brand model, retained for comparison
 - `models/yolov8n.pt` — required on test day
 - `models/car_color_classifier.pth` — optional; HSV is used without it
 
@@ -94,7 +111,15 @@ python training\train_color_classifier.py
 python training\evaluate.py
 ```
 
-`split_dataset.py` skips a brand with fewer than 8 images. `evaluate.py` prints brand accuracy, a confusion matrix, and a dry run on `data/tashkent_test`.
+`split_dataset.py` skips a brand with fewer than 8 images and writes a separate candidate split under `data/split_dataset_candidate/`; it never deletes an existing split. `train_brand_classifier.py` writes the next model to `models/car_brand_classifier_candidate_v3.pth`, keeping both existing models unchanged. `evaluate.py --model models\car_brand_classifier_candidate_v3.pth` prints validation accuracy, a confusion matrix, and a dry run on `data/tashkent_test`.
+
+The training and inference brand pipelines share their resize, RGB tensor conversion, and ImageNet normalization. Class order is stored in each checkpoint and loaded from that checkpoint. Validation images are scored by normalized class name, not by assuming the folder indices match the model's output indices.
+
+The street-photo dry run is not an accuracy measurement: `data/tashkent_test` currently has no per-car ground-truth labels. For domain-matched training, run `crop_street_photos.py`, manually identify every crop, then put labelled crops into `data/brand_dataset/<Brand>/`. Never train on unlabelled crops. Report the source of every imported dataset. The brand unknown threshold is set to 0.25 based on the existing validation confidence/coverage results; it changes how many guesses are shown, not the classifier's underlying accuracy. Detector confidence remains at 0.35 because the test set has no box annotations to verify whether lowering it adds true cars or false/duplicate detections.
+
+## Colour labels and HSV fallback
+
+Keep the eight exam labels in `src/config.py`: white, black, grey, red, blue, green, brown, yellow. Common paint names map into these scored classes: silver to grey, maroon to red, orange to yellow, and beige/gold to brown. The fallback votes on a central body region, excluding the outer 15% horizontally and the upper window/lower wheel regions. A trained colour model is used only when its confidence is at least 0.70; otherwise the HSV method is used. The threshold and HSV approximation should be described in the report.
 
 ## Design choices you must be able to explain
 
