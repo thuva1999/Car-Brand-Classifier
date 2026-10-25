@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+desktop.ini
+outputs/
+data/crops/unlabelled/
+/yolov8n.pt
+*.pt.bak
+.idea/
+.vscode/
