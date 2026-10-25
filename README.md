@@ -119,7 +119,7 @@ The street-photo dry run is not an accuracy measurement: `data/tashkent_test` cu
 
 ## Colour labels and HSV fallback
 
-Keep the eight exam labels in `src/config.py`: white, black, grey, red, blue, green, brown, yellow. Common paint names map into these scored classes: silver to grey, maroon to red, orange to yellow, and beige/gold to brown. The fallback votes on a central body region, excluding the outer 15% horizontally and the upper window/lower wheel regions. A trained colour model is used only when its confidence is at least 0.70; otherwise the HSV method is used. The threshold and HSV approximation should be described in the report.
+Keep the eight exam labels in `src/config.py`: white, black, grey, red, blue, green, brown, yellow. Common paint names map into these scored classes: silver to grey, maroon to red, orange to yellow, and beige/gold to brown. The fallback votes over HSV pixels in a central body region, excluding the outer 15% horizontally and the upper window/lower wheel regions. Its hand-tuned thresholds classify low-saturation dark pixels as black, medium/dark warm hues as brown, and brighter orange/yellow hues as yellow. A trained colour model is used only when its confidence is at least 0.70; otherwise the HSV method is used. HSV is an approximation affected by lighting, reflections, and the detector crop; describe those limitations in the report.
 
 ## Design choices you must be able to explain
 
