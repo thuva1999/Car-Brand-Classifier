@@ -124,7 +124,7 @@ def hsv_colour(crop: Image.Image) -> str:
 
     def bucket(h: int, s: int, v: int) -> str:
         if s < 35:
-            if v < 55:
+            if v < 90:
                 return "black"
             if v >= 215:
                 return "white"
@@ -135,10 +135,12 @@ def hsv_colour(crop: Image.Image) -> str:
             return "grey"
         if h <= 8 or h >= 170:
             return "maroon" if v < 120 else "red"
-        if 9 <= h <= 25 and s >= 100:
-            if h >= 20 and v < 225:
+        if 9 <= h <= 36 and s >= 100:
+            if h <= 19:
+                return "brown" if v < 210 else "orange"
+            if h <= 24:
                 return "gold"
-            return "orange"
+            return "yellow" if v >= 150 else "gold"
         if 9 <= h <= 36:
             return "gold" if s >= 35 else "beige"
         if v < 40:
