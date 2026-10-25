@@ -19,7 +19,7 @@ venv\Scripts\activate
 python infer.py path\to\photo.jpg
 ```
 
-The default inference checkpoint is the validated `car_brand_classifier_candidate_v2.pth`. The previous model remains available as `car_brand_classifier.pth`.
+The default inference checkpoint is `car_brand_classifier_candidate_v3.pth`, which includes Leapmotor and Li Auto. The earlier 17-class model remains available as `car_brand_classifier_candidate_v2.pth`, and the original 10-class model remains as `car_brand_classifier.pth`.
 
 To select a specific brand checkpoint:
 
@@ -67,8 +67,9 @@ The first detector run may download `yolov8n.pt`. Copy it into `models\yolov8n.p
 
 Weights:
 
-- `models/car_brand_classifier_candidate_v2.pth` — active brand model
-- `models/car_brand_classifier.pth` — previous brand model, retained for comparison
+- `models/car_brand_classifier_candidate_v3.pth` — active 19-class brand model
+- `models/car_brand_classifier_candidate_v2.pth` — previous 17-class model
+- `models/car_brand_classifier.pth` — original 10-class model, retained for comparison
 - `models/yolov8n.pt` — required on test day
 - `models/car_color_classifier.pth` — optional; HSV is used without it
 
@@ -111,7 +112,9 @@ python training\train_color_classifier.py
 python training\evaluate.py
 ```
 
-`split_dataset.py` skips a brand with fewer than 8 images and writes a separate candidate split under `data/split_dataset_candidate/`; it never deletes an existing split. `train_brand_classifier.py` writes the next model to `models/car_brand_classifier_candidate_v3.pth`, keeping both existing models unchanged. `evaluate.py --model models\car_brand_classifier_candidate_v3.pth` prints validation accuracy, a confusion matrix, and a dry run on `data/tashkent_test`.
+`split_dataset.py` skips a brand with fewer than 8 images and writes a separate candidate split under `data/split_dataset_candidate_v4/`; it never deletes an existing split. `train_brand_classifier.py` writes the next model to `models/car_brand_classifier_candidate_v4.pth`, keeping the active model unchanged. To evaluate the active model, run `evaluate.py --model models\car_brand_classifier_candidate_v3.pth --validation-dir data\split_dataset_candidate_v3\val`; it prints validation accuracy, a confusion matrix, and a dry run on `data/tashkent_test`.
+
+The 19-class v3 model reached 41.0% (456/1111) on its validation split. Leapmotor was correct on 3/7 validation images. Li Auto was correct on 5/6 non-duplicate validation images; one duplicate also appeared in training and was excluded from that estimate. These small class-specific samples are not enough to promise reliable recognition, and `data/tashkent_test` still has no ground-truth labels.
 
 The training and inference brand pipelines share their resize, RGB tensor conversion, and ImageNet normalization. Class order is stored in each checkpoint and loaded from that checkpoint. Validation images are scored by normalized class name, not by assuming the folder indices match the model's output indices.
 

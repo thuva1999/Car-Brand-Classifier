@@ -9,7 +9,7 @@ MODELS_DIR = PROJECT_DIR / "models"
 
 BRAND_DATASET_DIR = DATA_DIR / "brand_dataset"
 COLOR_DATASET_DIR = DATA_DIR / "color_dataset"
-SPLIT_BRAND_CANDIDATE_DIR = DATA_DIR / "split_dataset_candidate"
+SPLIT_BRAND_CANDIDATE_DIR = DATA_DIR / "split_dataset_candidate_v4"
 SPLIT_BRAND_DIR = SPLIT_BRAND_CANDIDATE_DIR
 SPLIT_COLOR_CANDIDATE_DIR = DATA_DIR / "split_color_candidate"
 SPLIT_COLOR_DIR = SPLIT_COLOR_CANDIDATE_DIR
@@ -21,8 +21,8 @@ STREET_PHOTO_DIRS = [
 LABELS_CSV = DATA_DIR / "labels" / "cars.csv"
 
 BRAND_BASELINE_MODEL_PATH = MODELS_DIR / "car_brand_classifier.pth"
-BRAND_MODEL_PATH = MODELS_DIR / "car_brand_classifier_candidate_v2.pth"
-BRAND_CANDIDATE_MODEL_PATH = MODELS_DIR / "car_brand_classifier_candidate_v3.pth"
+BRAND_MODEL_PATH = MODELS_DIR / "car_brand_classifier_candidate_v3.pth"
+BRAND_CANDIDATE_MODEL_PATH = MODELS_DIR / "car_brand_classifier_candidate_v4.pth"
 COLOR_MODEL_PATH = MODELS_DIR / "car_color_classifier.pth"
 COLOR_CANDIDATE_MODEL_PATH = MODELS_DIR / "car_color_classifier_candidate.pth"
 BRAND_NAMES_PATH = MODELS_DIR / "class_names.json"
