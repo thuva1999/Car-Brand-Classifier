@@ -21,7 +21,7 @@ STREET_PHOTO_DIRS = [
 LABELS_CSV = DATA_DIR / "labels" / "cars.csv"
 
 BRAND_BASELINE_MODEL_PATH = MODELS_DIR / "car_brand_classifier.pth"
-BRAND_MODEL_PATH = MODELS_DIR / "car_brand_classifier_candidate_v3.pth"
+BRAND_MODEL_PATH = MODELS_DIR / "car_brand_classifier_fixed.pth"
 BRAND_CANDIDATE_MODEL_PATH = MODELS_DIR / "car_brand_classifier_candidate_v4.pth"
 COLOR_MODEL_PATH = MODELS_DIR / "car_color_classifier.pth"
 COLOR_CANDIDATE_MODEL_PATH = MODELS_DIR / "car_color_classifier_candidate.pth"
@@ -40,7 +40,7 @@ VEHICLE_CLASS_IDS = [2, 7]
 DETECT_CONFIDENCE = 0.35
 MIN_BOX_RELATIVE_AREA = 0.008
 MIN_BOX_SIDE_PX = 40
-BRAND_UNKNOWN_THRESHOLD = 0.25
+BRAND_UNKNOWN_THRESHOLD = 0.00
 COLOR_MODEL_CONFIDENCE = 0.70
 
 COLOUR_NAMES = [
