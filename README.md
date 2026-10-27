@@ -2,16 +2,16 @@
 
 CSAI-3210 midterm pipeline. A phone photo of a Tashkent street goes in. The laptop, **offline**, prints one `(brand, colour)` pair per classifiable car.
 
-Architecture (keep this design; do not share it with other teams):
+Architecture:
 
-1. **YOLOv8n** pretrained on COCO finds cars and trucks (detector only).
+1. **YOLOv8n** pretrained on COCO finds cars (detector only).
 2. Each crop goes through **MobileNetV3-Small** fine-tuned on our brand folders.
-3. Colour is predicted on the same crop: a trained 8-class MobileNetV3-Small when its confidence is at least 0.70; otherwise **HSV voting** on the central car-body region (allowed by the brief).
-4. Small or low-confidence boxes are dropped. Low brand confidence becomes `unknown` so colour can still score.
+3. Colour is predicted on the same crop: a trained 8-class MobileNetV3-Small when its confidence is at least 0.70; otherwise **HSV voting** on the central car-body region.
+4. Small or low-confidence boxes are dropped. Low brand confidence becomes `unknown`.
 
-## Live test (test day)
+## Live test
 
-No internet. Use the `midterm` tag. One photo, under two minutes.
+No internet.One photo, under two minutes.
 
 ```bat
 cd "Car Brand Classifier"
@@ -44,8 +44,6 @@ Phone as webcam (SPACE classifies the frame, Q quits):
 python infer.py --camera 0
 ```
 
-Write the **Answer sheet** line on the form, for example:
-
 ```text
 BYD white; Chevrolet grey
 ```
@@ -74,9 +72,6 @@ Weights:
 - `models/car_color_classifier.pth` — optional; HSV is used without it
 
 ## Data
-
-Put **cropped cars** (or nearly full-frame cars) here:
-
 ```text
 data/brand_dataset/<BrandName>/*.jpg
 data/color_dataset/white|black|grey|red|blue|green|brown|yellow/*.jpg
