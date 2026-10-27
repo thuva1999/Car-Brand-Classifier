@@ -114,13 +114,18 @@ def hsv_colour(crop: Image.Image) -> str:
     hue = hsv[:, :, 0].astype(np.int32).ravel()
     saturation = hsv[:, :, 1].astype(np.int32).ravel()
     value = hsv[:, :, 2].astype(np.int32).ravel()
-    usable = value >= 20
+    usable = value >= 0
     if not np.any(usable):
         usable = np.ones_like(value, dtype=bool)
 
     hue = hue[usable]
     saturation = saturation[usable]
     value = value[usable]
+
+    median_v = float(np.median(value))
+    median_s = float(np.median(saturation))
+    if median_v < 65 or (median_v < 90 and median_s < 60):
+        return "black"
 
     def bucket(h: int, s: int, v: int) -> str:
         if s < 35:
