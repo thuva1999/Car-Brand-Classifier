@@ -23,10 +23,10 @@ from config import (  # noqa: E402
 )
 
 BATCH_SIZE = 16
-EPOCHS = 12
+EPOCHS = 40
 HEAD_LEARNING_RATE = 1e-3
-BODY_LEARNING_RATE = 3e-5
-UNFREEZE_AFTER_EPOCH = 3
+BODY_LEARNING_RATE = 1e-4
+UNFREEZE_AFTER_EPOCH = 2
 
 
 def get_device() -> torch.device:
