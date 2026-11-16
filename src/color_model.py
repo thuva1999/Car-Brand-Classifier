@@ -291,14 +291,15 @@ def hsv_colour_with_confidence(
         return "white", _rule_confidence(min(margin, colour_closeness))
     # White paint in shade drops to V ~150-175, overlapping silver. Silver /
     # grey metallic picks up the bluish sky cast (body S ~40-55), while white
-    # paint stays almost colourless (S ~10-25). Ignore glass/tyres (V < 60).
-    if median_value >= 150 and body_saturation < 28:
-        margin = min((median_value - 150) / 25, (28 - body_saturation) / 15)
+    # paint stays almost colourless (S ~10-30; a screen photo of a white
+    # Daewoo Nexia measured S 30, V 161). Ignore glass/tyres (V < 60).
+    if median_value >= 150 and body_saturation < 32:
+        margin = min((median_value - 150) / 25, (32 - body_saturation) / 15)
         return "white", _rule_confidence(min(margin, colour_closeness))
 
     margin = min(median_value - 65, 175 - median_value) / 40
     if median_value >= 150:
-        margin = min(margin, (body_saturation - 28) / 15)
+        margin = min(margin, (body_saturation - 32) / 15)
     return "grey", _rule_confidence(min(margin, colour_closeness))
 
 

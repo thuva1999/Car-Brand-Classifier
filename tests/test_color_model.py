@@ -143,6 +143,10 @@ class HsvColourTests(unittest.TestCase):
     def test_white_paint_in_shade_is_white(self):
         self.assertEqual(hsv_colour(solid_hsv_image(0, 15, 165)), "white")
 
+    def test_shaded_white_with_slight_screen_cast_is_white(self):
+        # Live photo 16 Nov: white Daewoo Nexia on a screen, V ~161, S ~30.
+        self.assertEqual(hsv_colour(solid_hsv_image(108, 30, 161)), "white")
+
     def test_silver_with_sky_tint_at_same_brightness_is_grey(self):
         self.assertEqual(hsv_colour(solid_hsv_image(104, 45, 165)), "grey")
 
