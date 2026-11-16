@@ -196,14 +196,19 @@ def hsv_colour_with_confidence(
        with well-lit, saturated pixels. Blue needs S >= 100, because the cast
        sits in the blue hue range; red and green are cast-free, so S >= 60 is
        enough (dull lime/olive paint in shade). Yellow needs S >= 140 so beige
-       is not mistaken for it.
+       is not mistaken for it. Blue does not count on a dark body (darkest
+       quarter V < 80) unless vivid: that is black paint under a blue cast.
+       Red does not count when the red pixels are very bright (lit tail
+       lights on a rear view).
     2. Beige/gold/brown paint is warm but dull, so it is detected separately:
        warm hue (11-30) with S >= 30 covering >= 25% of the paint pixels,
        and at least 0.15 more than the background (``scene_warm``, from
        ``scene_warmth``) so warm sunlight on white paint is not called brown.
     3. Otherwise the car is neutral and the median brightness decides
        black / grey / white. Black paint reflects a lot, so its median V is
-       typically 20-65, not near 0. A dark car (V < 110) whose lit pixels are
+       typically 20-65, not near 0; reflective black photographed off a
+       screen can have a median up to ~125 but keeps a dark core (darkest
+       quarter V <= 56), so that is black too. A dark car (V < 110) whose lit pixels are
        strongly saturated (S >= 75) is dark-coloured paint such as greenish
        black, not grey: black. Shaded white (V 150-175) is told apart from
        silver by its lower saturation.
@@ -220,19 +225,34 @@ def hsv_colour_with_confidence(
     well_lit = (value >= 60) & (value <= 235)
     saturated = well_lit & (saturation >= 60)
     strong = well_lit & (saturation >= 100)
-    strong_counts = {
-        "red": int(np.count_nonzero(saturated & ((hue <= 10) | (hue >= 170)))),
-        "yellow": int(
-            np.count_nonzero(
-                well_lit & (hue >= 20) & (hue <= 35)
-                & (saturation >= 140) & (value >= 145)
-            )
-        ),
-        "green": int(np.count_nonzero(saturated & (hue >= 36) & (hue <= 84))),
-        "blue": int(np.count_nonzero(strong & (hue >= 85) & (hue <= 169))),
+    colour_masks = {
+        "red": saturated & ((hue <= 10) | (hue >= 170)),
+        "yellow": well_lit & (hue >= 20) & (hue <= 35) & (saturation >= 140) & (value >= 145),
+        "green": saturated & (hue >= 36) & (hue <= 84),
+        "blue": strong & (hue >= 85) & (hue <= 169),
     }
+    strong_counts = {name: int(np.count_nonzero(m)) for name, m in colour_masks.items()}
+    # Darkest quarter of the body. Glossy black paint photographed off a
+    # screen is covered in bright reflections (trees, sky, watermarks), which
+    # lift the median, but its dark core survives: p25 <= ~56. Grey and white
+    # bodies stay brighter, apart from wheel arches. Measured on 106
+    # hand-labelled live cars (outputs/colour_labelling, 16 Nov).
+    dark_quarter = float(np.percentile(value, 25))
+    median_value = float(np.median(value))
+
     best = max(strong_counts, key=strong_counts.get)
     best_fraction = strong_counts[best] / total
+    if best_fraction >= 0.15 and best == "blue" and dark_quarter < 80:
+        # Dark body with blue-tinted reflections: black paint under the
+        # screen's blue cast, not blue paint. Real blue bodies are lighter
+        # (p25 >= ~90) unless the blue is vivid (S >= 185).
+        if float(np.median(saturation[colour_masks["blue"]])) < 185:
+            best_fraction = 0.0
+    if best_fraction >= 0.15 and best == "red":
+        # Lit tail lights on a rear view are bright red (V ~200); red paint
+        # sits far lower (V ~90-140).
+        if float(np.median(value[colour_masks["red"]])) >= 180:
+            best_fraction = 0.0
     if best_fraction >= 0.15:
         return best, _rule_confidence((best_fraction - 0.15) / 0.35)
 
@@ -251,9 +271,12 @@ def hsv_colour_with_confidence(
     # Neutral: less sure when a colour almost won the votes above.
     colour_closeness = 1.0 - max(best_fraction / 0.15, warm_fraction / 0.25)
 
-    median_value = float(np.median(value))
     if median_value < 65:
         margin = (65 - median_value) / 40
+        return "black", _rule_confidence(min(margin, colour_closeness))
+    if dark_quarter <= 56 and median_value <= 125:
+        # Reflective black: dark core, reflections lift the median.
+        margin = min((56 - dark_quarter) / 30, (125 - median_value) / 40)
         return "black", _rule_confidence(min(margin, colour_closeness))
     # Very dark green/blue/teal paint (e.g. "greenish black") is too dark for
     # the colour votes above but far too saturated to be grey paint (grey with

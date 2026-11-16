@@ -200,11 +200,17 @@ Pixels used: the car's YOLO segmentation outline (slightly eroded so road and ne
 
 Rules, tuned on Tashkent street photos where the phone camera adds a bluish cast (grey, white and black paint, and sky reflections, show up as hue ~104 with saturation 30–60):
 
-1. **Red / green / yellow / blue** win when well-lit, saturated pixels cover at least 15% of the paint. Blue needs saturation ≥ 100 because the cast is blue; red and green need ≥ 60; yellow needs ≥ 140 so beige is not called yellow.
+1. **Red / green / yellow / blue** win when well-lit, saturated pixels cover at least 15% of the paint. Blue needs saturation ≥ 100 because the cast is blue; red and green need ≥ 60; yellow needs ≥ 140 so beige is not called yellow. Blue does not count on a dark body (darkest quarter of the paint pixels below brightness 80) unless the blue is vivid (saturation ≥ 185): that is black paint under the screen's blue cast. Red does not count when the red pixels are very bright (≥ 180): lit tail lights on a rear view.
 2. **Brown** (also beige/gold): warm hue with saturation ≥ 30 covering at least 25%, and at least 15 points more than the photo's background (outside the car boxes). If the road and buildings are just as warm, the tint comes from the light (golden hour, warm camera setting), not the paint.
-3. Otherwise **black / grey / white** by median brightness: below 65 is black (glossy black paint reflects a lot), 175 and above is white. White paint in shade (brightness 150–175) is told apart from silver by its lower saturation.
+3. Otherwise **black / grey / white** by brightness: median below 65 is black. Glossy black photographed off a screen is covered in bright reflections (trees, sky, watermarks) that lift the median up to ~125, but it keeps a dark core, so darkest quarter ≤ 56 with median ≤ 125 is black too. A dark (median < 110), strongly saturated (≥ 75) body such as greenish black is black. Median 175 and above is white; white paint in shade (150–175) is told apart from silver by its lower saturation.
 
-On 22 hand-labelled cars from `data/tashkent_test` (labelled by eye, and the same photos were used for tuning, so this is optimistic) it gave about 19/22 correct, vs 7/22 for the earlier per-pixel vote. Remaining errors: a front-on black car (windscreen in the band) and a green truck read as blue. A real colour accuracy needs a separate labelled set.
+### Colour accuracy on live-test photos
+
+`outputs/live/` holds every photo taken through `serve.py`, i.e. phone photos of a screen, like the live test. `python training\make_colour_labelling_sheets.py` crops every car into numbered sheets plus `outputs/colour_labelling/cars.csv`; fill its `true_colour` column, then `python training\evaluate_colour.py` re-scores the current rules on exactly those pixels and lists every change and miss.
+
+106 cars were labelled on 16 Nov (48 white, 27 black, 17 grey, 9 blue, 3 brown, 1 red, 1 yellow). The rules above went from **76/106 (72%) to 90/106 (85%)**; black from 7/27 to 22/27, white 46/48, grey 10/17, blue 8/9. The new cut-offs were set on these same cars (about 37 distinct cars photographed repeatedly), so expect somewhat lower on new photos. A learned colour classifier on DINOv2 features was tried and scored only ~45% in grouped cross-validation: too few distinct cars.
+
+Remaining misses: black cars washed out by the screen with no dark pixels left (look grey), the rear of a black car with tail lights (grey), grey vs white in the overlapping 160–205 brightness range, silver with a strong blue cast (blue), pale blue (white), beige with a pink tint (red). `outputs/` is not in git: back up `outputs/colour_labelling/` to keep the labels.
 
 ## Design choices you must be able to explain
 
