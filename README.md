@@ -2,16 +2,16 @@
 
 CSAI-3210 midterm pipeline. A phone photo of a Tashkent street goes in. The laptop, **offline**, prints one `(brand, colour)` pair per classifiable car.
 
-Architecture (keep this design; do not share it with other teams):
+Architecture:
 
-1. **YOLOv8n** pretrained on COCO finds cars and trucks (detector only).
-2. Each crop goes through **MobileNetV3-Small** fine-tuned on our brand folders.
-3. Colour is predicted on the same crop: a trained 8-class MobileNetV3-Small when its confidence is at least 0.70; otherwise **HSV voting** on the central car-body region (allowed by the brief).
-4. Small or low-confidence boxes are dropped. Low brand confidence becomes `unknown` so colour can still score.
+1. **YOLO11n-seg** pretrained on COCO finds cars and trucks and outlines each one (detector only). Overlapping "car" and "truck" boxes for the same vehicle are merged. If `models/yolo11n-seg.pt` is missing, the first run downloads it (needs internet).
+2. Each crop goes through a **brand ensemble** of two models, **24 brands**: a frozen **DINOv2 ViT-S/14** with a trained linear head (`models/car_brand_classifier_candidate_v3.pth`) and **MobileNetV3-Small** fine-tuned on our brand folders (`models/car_brand_classifier_candidate_v2.pth`). Their brand probabilities are averaged 40% / 60%.
+3. Colour uses **HSV rules** on the car's own pixels (its segmentation outline, door/bonnet band). No colour model has been trained yet: `data/color_dataset` is empty. The code would use a trained colour model only if `models/car_color_classifier.pth` existed and was at least 0.70 confident.
+4. Small or low-confidence boxes are dropped. Every prediction prints its brand, colour and detection confidence.
 
-## Live test (test day)
+## Live test
 
-No internet. Use the `midterm` tag. One photo, under two minutes.
+No internet. One photo, under two minutes.
 
 ```bat
 cd "Car Brand Classifier"
@@ -19,12 +19,24 @@ venv\Scripts\activate
 python infer.py path\to\photo.jpg
 ```
 
-The default inference checkpoint is `car_brand_classifier_candidate_v3.pth`, which includes Leapmotor and Li Auto. The earlier 17-class model remains available as `car_brand_classifier_candidate_v2.pth`, and the original 10-class model remains as `car_brand_classifier.pth`.
+The default brand model is the DINOv2 + MobileNet ensemble (`candidate_v3` + `candidate_v2`, 24 brands), set by `BRAND_MODEL_PATH` and `BRAND_ENSEMBLE_WEIGHTS` in `src/config.py`. Set `BRAND_MODEL_PATH` to a single checkpoint to run that model alone.
 
-To select a specific brand checkpoint:
+Example output (`data\tashkent_test\IMG_20261023_164620.jpg`):
+
+```text
+Car 1: Chevrolet (71%) — grey (68%)   [detected 92%]
+Car 2: Lexus (21%) — white (79%)   [detected 91%]
+Car 3: Hyundai (35%) — black (72%)   [detected 90%]
+Car 4: Chevrolet (18%) — white (74%)   [detected 76%]
+```
+
+Brand % is the model's softmax probability. Colour % says how clearly the HSV rule decided (50% = right on a threshold, capped at 95%; not a calibrated probability).
+
+To select a specific brand checkpoint, or several to run as an equal-weight ensemble:
 
 ```bat
-python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier.pth
+python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v2.pth
+python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v3.pth models\car_brand_classifier_candidate_v2.pth
 ```
 
 For a single image that is already cropped to one car, skip YOLO explicitly:
@@ -38,19 +50,39 @@ Normal street photos should not use `--crop`; YOLO is required to find and crop 
 You can also pass a photo's filename by itself if it is stored somewhere under
 `data\`; if that filename occurs more than once, pass the full path instead.
 
+### Phone camera → laptop (recommended on test day)
+
+`serve.py` serves a small web page **from the laptop** on the local network. The phone only takes the photo and shows the answer; YOLO, the brand model and the colour rules all run on the laptop. No internet and no cloud service is used.
+
+1. Turn on the **phone's hotspot** and connect the laptop to it (no mobile data needed; the classroom Wi-Fi may block phone↔laptop traffic).
+2. On the laptop:
+
+   ```bat
+   venv\Scripts\activate
+   python serve.py
+   ```
+
+   Wait for `Open one of these on the phone`, e.g. `http://192.168.43.10:8000`.
+3. Open that address in the phone's browser and tap **Take photo**. The phone's own camera opens; take the photo of the screen.
+4. The answer appears on the phone and in the laptop terminal within a few seconds, e.g. `Chevrolet white; Kia grey`, with each car's confidence and the photo with boxes. Write the answer line on the sheet.
+
+Every photo and its annotated result are saved in `outputs/live/`.
+
+**First run on a laptop:** Windows asks whether to allow Python on networks. Tick **Private** *and* **Public** (a phone hotspot is often treated as a public network), then **Allow**. If the phone still cannot open the page: Windows Security → Firewall & network protection → Allow an app through firewall → enable `python.exe` for both, or set the hotspot connection to *Private* in Settings → Network. Rehearse this once before test day.
+
+Backup if the hotspot fails: send the photo to yourself in Telegram, save it on the laptop, and run `python infer.py path\to\photo.jpg`.
+
 Phone as webcam (SPACE classifies the frame, Q quits):
 
 ```bat
 python infer.py --camera 0
 ```
 
-Write the **Answer sheet** line on the form, for example:
-
 ```text
 BYD white; Chevrolet grey
 ```
 
-If the model is not sure of the badge it prints `unknown` plus the colour.
+`BRAND_UNKNOWN_THRESHOLD` is 0.00, so the model always names its best brand, even at low confidence. Raise it in `src/config.py` to print `unknown` below that confidence.
 
 ## Clean laptop setup
 
@@ -63,19 +95,21 @@ pip install -r requirements.txt
 python infer.py data\tashkent_test\IMG_20261023_164608.jpg
 ```
 
-The first detector run may download `yolov8n.pt`. Copy it into `models\yolov8n.pt` **before** test day so the classroom has no network.
+`models\yolo11n-seg.pt` must be present **before** test day because the classroom has no network (the first detector run downloads it into `models\` automatically). 
 
 Weights:
 
-- `models/car_brand_classifier_candidate_v3.pth` — active 19-class brand model
-- `models/car_brand_classifier_candidate_v2.pth` — previous 17-class model
-- `models/car_brand_classifier.pth` — original 10-class model, retained for comparison
-- `models/yolov8n.pt` — required on test day
-- `models/car_color_classifier.pth` — optional; HSV is used without it
+- `models/car_brand_classifier_candidate_v3.pth` — **brand model, part 1**: DINOv2 ViT-S/14 + linear head (24 brands), trained on `data/split_dataset_candidate_v2` by `training/train_brand_dinov2.py`
+- `models/car_brand_classifier_candidate_v2.pth` — **brand model, part 2**: MobileNetV3-Small (24 brands), trained on `data/split_dataset_candidate_v2`
+- `models/dinov2_vits14_224.pth` — pretrained DINOv2 weights, needed only to train a new DINOv2 head
+- `models/car_brand_classifier_candidate_v1.pth` — previous MobileNet model (22 brands), kept for comparison
+- `models/yolo11n-seg.pt` — detector with car outlines, required on test day
+- `models/color_names.json` — the eight colour labels
+- `models/car_color_classifier.pth` — not trained yet; HSV is used without it
+
+Earlier experiment checkpoints (the old v1–v5, `fixed`, `v4_reduced`, the YOLOv8n detector) were removed or replaced; tracked ones remain in git history. The numbering restarted at `candidate_v1` after the dataset was re-cleaned.
 
 ## Data
-
-Put **cropped cars** (or nearly full-frame cars) here:
 
 ```text
 data/brand_dataset/<BrandName>/*.jpg
@@ -83,6 +117,8 @@ data/color_dataset/white|black|grey|red|blue|green|brown|yellow/*.jpg
 ```
 
 Brand folder names must match the badge in English: `Chevrolet`, `Daewoo`, `BYD`, `Jetour`, `Mercedes-Benz`, `Li Auto`, …
+
+Removed brands: Audi, Ford, Jeep, Mitsubishi, Tesla, Toyota and Volkswagen are listed in `EXCLUDED_BRANDS` (`src/config.py`). Their image folders were deleted, `split_dataset.py` skips them, and the active model cannot predict them.
 
 Chinese-brand folders already exist under `data/brand_dataset/` (`BYD`, `Chery`, `Changan`, `Geely`, `Leapmotor`, …) but they were empty when the pipeline was wired. **Fill them.** Half of the live test is Chinese brands. Photograph dealer streets and new residential car parks, many angles, day and evening, and a few photos of a car on a screen (the live test is a phone pointed at a projector).
 
@@ -103,47 +139,93 @@ python training\crop_street_photos.py --input data\tashkent_test
 
 Crops land in `data/crops/unlabelled/`. Sort them into brand and colour folders.
 
-Then split and train:
+Then clean, split and train:
 
 ```bat
+python training\clean_brand_dataset.py
 python training\split_dataset.py
 python training\train_brand_classifier.py
 python training\train_color_classifier.py
 python training\evaluate.py
 ```
 
-`split_dataset.py` skips a brand with fewer than 8 images and writes a separate candidate split under `data/split_dataset_candidate_v4/`; it never deletes an existing split. `train_brand_classifier.py` writes the next model to `models/car_brand_classifier_candidate_v4.pth`, keeping the active model unchanged. To evaluate the active model, run `evaluate.py --model models\car_brand_classifier_candidate_v3.pth --validation-dir data\split_dataset_candidate_v3\val`; it prints validation accuracy, a confusion matrix, and a dry run on `data/tashkent_test`.
+`clean_brand_dataset.py` runs the detector over `data/brand_dataset/` and writes the largest vehicle box of each image to `data/brand_dataset_clean/`, so training sees the same kind of crop as inference. Images where no vehicle covers at least 8% of the frame (and 64 px per side) (interiors, wheels, light close-ups) and byte-identical duplicates are left out; rejected images are copied to `data/brand_dataset_review/rejected_by_yolo/` for a manual check, and `clean_report.csv` lists every decision. The original folders are never changed.
 
-The 19-class v3 model reached 41.0% (456/1111) on its validation split. Leapmotor was correct on 3/7 validation images. Li Auto was correct on 5/6 non-duplicate validation images; one duplicate also appeared in training and was excluded from that estimate. These small class-specific samples are not enough to promise reliable recognition, and `data/tashkent_test` still has no ground-truth labels.
+`split_dataset.py` reads the clean folder when it exists and splits by group: all listing photos of the same model-year car, and all crops from the same street photo, land on the same side, so near-duplicates cannot inflate validation accuracy.
+
+`train_brand_classifier.py` pads each crop to a square instead of stretching it, uses AdamW with warmup and cosine decay, label smoothing 0.1, oversampling of small brands capped at 3x, and keeps the checkpoint with the best *balanced* (per-brand average) validation accuracy. `--arch mobilenet_v3_large` or `--arch efficientnet_b0` and `--image-size` select a bigger backbone or input. Each checkpoint stores its architecture, image size and preprocessing, so older stretched-input checkpoints still load correctly. Inference and `evaluate.py` average predictions over the crop and its mirror image.
+
+`split_dataset.py` skips a brand with fewer than 8 images or listed in `EXCLUDED_BRANDS`, and writes the split configured as `SPLIT_BRAND_DIR` (currently `data/split_dataset_candidate_v1/`); it never deletes an existing split. `train_brand_classifier.py` writes the next model to `BRAND_CANDIDATE_MODEL_PATH`, keeping the active model unchanged. `python training\evaluate.py` evaluates the active model on that split and prints validation accuracy, per-brand accuracy, a confusion matrix (also saved under `outputs/`), and a dry run on `data/tashkent_test`.
+
+`training/remove_brands.py` copies a trained checkpoint and removes the output rows of the given brands, so the copy can only choose among the remaining ones. It does not retrain.
+
+### Brand results (active: DINOv2 + MobileNet ensemble, 24 brands)
+
+`candidate_v2` (MobileNetV3-Small, 40 epochs) and `candidate_v3` (frozen DINOv2 ViT-S/14 + linear head) were both trained on `data/split_dataset_candidate_v2` (3,937 train / 1,057 validation). DINOv2 is not fine-tuned: `train_brand_dinov2.py` extracts its features once (clean crop, mirror, one augmented copy; cached in `outputs/`) and trains only the head, because fine-tuning a ViT on a laptop CPU takes hours. The two models make different mistakes, so averaging their probabilities beats both:
+
+| Model | Val acc | Val balanced | 549 images no model trained on: acc | balanced |
+|---|---|---|---|---|
+| candidate_v2 (MobileNet) alone | 51.5% | 49.0% | 51.0% | 48.6% |
+| candidate_v3 (DINOv2) alone | 46.5% | 53.5% | 42.4% | 53.4% |
+| **ensemble, 40% DINOv2 / 60% MobileNet (active)** | **56.1%** | **57.1%** | **54.8%** | **55.3%** |
+
+Every DINOv2 weight from 0.3 to 0.6 beat both single models; 0.4 was chosen on this validation split, so the ensemble numbers are slightly optimistic. Biggest per-brand gains over v2 alone: Lexus 67→80%, Nissan 41→52%, Hyundai 49→66%, BMW 60→68%, Chevrolet 59→67%. Still weak: Changan 31%, Chery 30%, Honda 29%. Reproduce with `python training\evaluate.py`.
+
+### Earlier brand results (candidate_v1, 22 brands)
+
+Dataset: every image re-cleaned with YOLO (3,513 crops kept, 97 exact duplicates and images with no vehicle dropped, misfiled images moved to the right brand). Grouped split: 2,792 train / 717 validation. Brands with fewer than 8 images (Deepal, Lada) are skipped.
+
+| Model | Validation images | Correct | Accuracy |
+|---|---|---|---|
+| **candidate_v1 (active)** | full v1 validation split | 424/717 | **59.1%** |
+| **candidate_v1 (active)** | 173 images neither model trained on | 121/173 | **69.9%** |
+| previous model (v4_reduced) | same 173 images | 86/173 | 49.7% |
+
+The previous model was trained on an older split, so most of the new validation images were in its training data; only the 173 images unseen by both models give a fair comparison. On those, Chevrolet improved from 32% to 73% after adding Uzbek-market models (Onix, Cobalt, Gentra, Nexia, Spark, Tracker, Damas), and Dongfeng (new, 61 images) reached 67%.
+
+Per-brand accuracy on the full validation split: Hongqi 100%, GAC Aion 92%, Li Auto 83%, Zeekr 75%, Lexus 73%, BMW 72%, Haval 71%, Mercedes-Benz 70%, Dongfeng 67%, Chevrolet 60%, Jaguar 59%, Leapmotor 57%, Honda 53%, Kia 53%, Chery 50%, JAC 50%, Nissan 46%, BYD 45%, Hyundai 45%, Geely 39%, Changan 25%, Jetour 0% (3 validation images, 13 training). Small brands have only 3–20 validation images, so their percentages are rough. The confusion matrix is written to `outputs/brand_confusion_matrix_car_brand_classifier_candidate_v1.csv` by `python training\evaluate.py`. The validation images are mostly listing and dealer photos, not Tashkent street photos, and `data/tashkent_test` still has no ground-truth labels, so live-test accuracy is not yet measured.
 
 The training and inference brand pipelines share their resize, RGB tensor conversion, and ImageNet normalization. Class order is stored in each checkpoint and loaded from that checkpoint. Validation images are scored by normalized class name, not by assuming the folder indices match the model's output indices.
 
-The street-photo dry run is not an accuracy measurement: `data/tashkent_test` currently has no per-car ground-truth labels. For domain-matched training, run `crop_street_photos.py`, manually identify every crop, then put labelled crops into `data/brand_dataset/<Brand>/`. Never train on unlabelled crops. Report the source of every imported dataset. The brand unknown threshold is set to 0.25 based on the existing validation confidence/coverage results; it changes how many guesses are shown, not the classifier's underlying accuracy. Detector confidence remains at 0.35 because the test set has no box annotations to verify whether lowering it adds true cars or false/duplicate detections.
+The street-photo dry run is not an accuracy measurement: `data/tashkent_test` currently has no per-car ground-truth labels. For domain-matched training, run `crop_street_photos.py`, manually identify every crop, then put labelled crops into `data/brand_dataset/<Brand>/`. Never train on unlabelled crops. Report the source of every imported dataset. The brand unknown threshold is 0.00, so a brand is always guessed. Detector confidence remains at 0.35 because the test set has no box annotations to verify whether lowering it adds true cars or false/duplicate detections.
 
-## Colour labels and HSV fallback
+## Colour labels and HSV method
 
-Keep the eight exam labels in `src/config.py`: white, black, grey, red, blue, green, brown, yellow. Common paint names map into these scored classes: silver to grey, maroon to red, orange to yellow, and beige/gold to brown. The fallback votes over HSV pixels in a central body region, excluding the outer 15% horizontally and the upper window/lower wheel regions. Its hand-tuned thresholds classify low-saturation dark pixels as black, medium/dark warm hues as brown, and brighter orange/yellow hues as yellow. A trained colour model is used only when its confidence is at least 0.70; otherwise the HSV method is used. HSV is an approximation affected by lighting, reflections, and the detector crop; describe those limitations in the report.
+Keep the eight exam labels in `src/config.py`: white, black, grey, red, blue, green, brown, yellow. No colour model has been trained (`data/color_dataset` is empty), so every colour currently comes from the HSV rules in `src/color_model.py`.
+
+Pixels used: the car's YOLO segmentation outline (slightly eroded so road and neighbouring cars do not leak in), restricted to the door/bonnet band (30–70% of crop height, 15–85% of width). Falls back to the band alone if the outline is missing or too small.
+
+Rules, tuned on Tashkent street photos where the phone camera adds a bluish cast (grey, white and black paint, and sky reflections, show up as hue ~104 with saturation 30–60):
+
+1. **Red / green / yellow / blue** win when well-lit, saturated pixels cover at least 15% of the paint. Blue needs saturation ≥ 100 because the cast is blue; red and green need ≥ 60; yellow needs ≥ 140 so beige is not called yellow.
+2. **Brown** (also beige/gold): warm hue with saturation ≥ 30 covering at least 25%, and at least 15 points more than the photo's background (outside the car boxes). If the road and buildings are just as warm, the tint comes from the light (golden hour, warm camera setting), not the paint.
+3. Otherwise **black / grey / white** by median brightness: below 65 is black (glossy black paint reflects a lot), 175 and above is white. White paint in shade (brightness 150–175) is told apart from silver by its lower saturation.
+
+On 22 hand-labelled cars from `data/tashkent_test` (labelled by eye, and the same photos were used for tuning, so this is optimistic) it gave about 19/22 correct, vs 7/22 for the earlier per-pixel vote. Remaining errors: a front-on black car (windscreen in the band) and a green truck read as blue. A real colour accuracy needs a separate labelled set.
 
 ## Design choices you must be able to explain
 
 - **Why YOLO + classifier, not one whole-image network?** Test photos have one or many cars. Extra leftover predictions cost 1 point, so we filter by box size and detector confidence instead of guessing a car in every frame.
 - **Why MobileNetV3-Small?** Small enough for a CPU laptop, ImageNet pretrained, and already our brand backbone. Features are frozen for a few epochs, then unfrozen at a lower learning rate.
-- **Why `unknown`?** A wrong brand scores 0 for brand; `unknown` also scores 0 for brand but still allows the colour share, and it avoids a confident wrong badge.
+- **Why no `unknown`?** A wrong brand and `unknown` both score 0 for brand, and colour still scores either way, so always guessing can only gain points. The threshold can be raised in `src/config.py` if a confident wrong badge is penalised.
 - **Why HSV colour until crops are labelled?** The brief allows a non-learned colour method if we describe it. HSV on the **crop** is much less noisy than HSV on the whole street. Replace it by training `train_color_classifier.py` once `data/color_dataset` is filled.
 
 ## Repository layout
 
 ```text
-infer.py                     live-test entry point
+infer.py                     live-test entry point (photo file or webcam)
+serve.py                     phone-camera page served from the laptop (local network only)
 src/config.py                paths and thresholds
-src/detect.py                YOLOv8n car finder
+src/detect.py                YOLO11n-seg car finder and outlines (YOLO11n / YOLOv8n fallback)
 src/brand_model.py           MobileNetV3-Small brand head
 src/color_model.py           colour classifier or HSV
 src/pipeline.py              ties the three stages together
+training/clean_brand_dataset.py
 training/split_dataset.py
 training/train_brand_classifier.py
 training/train_color_classifier.py
 training/evaluate.py
+training/remove_brands.py
 training/crop_street_photos.py
 models/                      trained weights
 data/brand_dataset/          labelled brand crops

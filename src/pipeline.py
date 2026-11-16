@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from brand_model import load_brand_model, predict_brand
-from color_model import load_color_model, predict_color
+from color_model import load_color_model, predict_color, scene_warmth
 from config import PROJECT_DIR
 from detect import crop_box, detect_cars, load_detector
 
@@ -40,11 +40,23 @@ class CarPipeline:
         if self.detector is None:
             raise RuntimeError("Vehicle detection was disabled for this pipeline.")
         cars = detect_cars(image, self.detector)
+        if not cars:
+            # Every test photo shows a car; when it fills the frame YOLO can
+            # miss it (an Aion front close-up came out as "suitcase"). A guess
+            # on the whole photo can score, an empty answer cannot.
+            cars = [{"box": (0, 0, image.width, image.height), "detect_confidence": 0.0, "mask": None}]
+        scene_warm = scene_warmth(image, [car["box"] for car in cars])
         predictions = []
         for car in cars:
             crop = crop_box(image, car["box"])
             predictions.append(
-                self._predict_crop(crop, car["box"], car["detect_confidence"])
+                self._predict_crop(
+                    crop,
+                    car["box"],
+                    car["detect_confidence"],
+                    car.get("mask"),
+                    scene_warm,
+                )
             )
         return predictions
 
@@ -64,6 +76,8 @@ class CarPipeline:
         crop: Image.Image,
         box: tuple[int, int, int, int],
         detect_confidence: float,
+        mask: np.ndarray | None = None,
+        scene_warm: float | None = None,
     ) -> dict:
         brand, brand_confidence = predict_brand(
             crop,
@@ -78,6 +92,8 @@ class CarPipeline:
             self.color_names,
             self.color_transform,
             self.device,
+            mask=mask,
+            scene_warm=scene_warm,
         )
         return {
             "brand": brand,
@@ -93,27 +109,47 @@ class CarPipeline:
         return self.predict_image(image)
 
 
-def format_answer_line(predictions: list[dict]) -> str:
+def format_prediction(item: dict, with_confidence: bool = True) -> str:
+    """'Chevrolet 87% white 92%' - percentages are the model's (brand) or the
+    colour rule's confidence in its own answer."""
+
+    if not with_confidence:
+        return f"{item['brand']} {item['colour']}"
+    return (
+        f"{item['brand']} {item['brand_confidence']:.0%} "
+        f"{item['colour']} {item['colour_confidence']:.0%}"
+    )
+
+
+def format_answer_line(predictions: list[dict], with_confidence: bool = False) -> str:
     if not predictions:
         return "(no classifiable cars)"
-    return "; ".join(f"{item['brand']} {item['colour']}" for item in predictions)
+    return "; ".join(format_prediction(item, with_confidence) for item in predictions)
 
 
 def annotate_image(image: Image.Image, predictions: list[dict]) -> Image.Image:
     canvas = image.copy()
     draw = ImageDraw.Draw(canvas)
+    # Scale text and lines with the photo: a fixed 10 px font is unreadable on
+    # a 4000 px phone photo.
+    font_size = max(14, round(max(canvas.size) / 45))
+    line_width = max(3, font_size // 6)
     try:
+        font = ImageFont.load_default(size=font_size)
+    except (OSError, TypeError):  # Pillow < 10.1 has no size argument
         font = ImageFont.load_default()
-    except OSError:
-        font = None
 
-    for item in predictions:
+    for number, item in enumerate(predictions, start=1):
         x1, y1, x2, y2 = item["box"]
-        label = f"{item['brand']} {item['colour']}"
-        draw.rectangle((x1, y1, x2, y2), outline=(0, 200, 80), width=3)
-        text_top = max(0, y1 - 16)
-        draw.rectangle((x1, text_top, x1 + 8 * len(label), text_top + 16), fill=(0, 200, 80))
-        draw.text((x1 + 2, text_top + 2), label, fill=(0, 0, 0), font=font)
+        label = f"{number}. {format_prediction(item)}"
+        draw.rectangle((x1, y1, x2, y2), outline=(0, 200, 80), width=line_width)
+        left, top, right, bottom = draw.textbbox((0, 0), label, font=font)
+        pad = font_size // 4
+        width, height = right - left + 2 * pad, bottom - top + 2 * pad
+        text_x = min(x1, max(0, canvas.width - width))
+        text_y = y1 - height if y1 - height >= 0 else y1
+        draw.rectangle((text_x, text_y, text_x + width, text_y + height), fill=(0, 200, 80))
+        draw.text((text_x + pad - left, text_y + pad - top), label, fill=(0, 0, 0), font=font)
     return canvas
 
 

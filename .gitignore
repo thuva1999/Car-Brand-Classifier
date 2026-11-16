@@ -11,3 +11,10 @@ data/split_color_candidate/
 *.pt.bak
 .idea/
 .vscode/
+
+# Generated from data/brand_dataset by training/clean_brand_dataset.py and
+# training/split_dataset.py; rebuild instead of committing (~1.7 GB of copies).
+# Already-tracked files in these folders stay tracked.
+data/brand_dataset_clean/
+data/brand_dataset_review/
+data/split_dataset_candidate_v*/

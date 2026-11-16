@@ -1,6 +1,8 @@
-"""Find cars in a street photo with a COCO-pretrained YOLOv8n detector.
+"""Find cars in a street photo with a COCO-pretrained YOLO detector.
 
-The detector is used only to crop vehicles. Brand and colour come from
+YOLO11n-seg is preferred: besides the box it outlines each car, so colour is
+read from that car's own pixels instead of neighbours, road and background.
+The detector is used only to locate vehicles. Brand and colour come from
 models we train ourselves.
 """
 
@@ -8,15 +10,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import cv2
 import numpy as np
 from PIL import Image
 
 from config import (
     DETECT_CONFIDENCE,
     MIN_BOX_RELATIVE_AREA,
+    MIN_AREA_VS_LARGEST,
     MIN_BOX_SIDE_PX,
     VEHICLE_CLASS_IDS,
-    YOLO_WEIGHTS_PATH,
+    YOLO_SEG_WEIGHTS_PATH,
 )
 
 
@@ -31,15 +35,15 @@ def load_detector(weights_path: Path | None = None):
         ) from error
 
     SETTINGS["sync"] = False
-    path = Path(weights_path) if weights_path else YOLO_WEIGHTS_PATH
+    path = Path(weights_path) if weights_path else YOLO_SEG_WEIGHTS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if path.exists():
         return YOLO(str(path))
 
-    # First run may download yolov8n.pt; keep a copy in models/ for the live test.
-    model = YOLO("yolov8n.pt")
-    downloaded = Path(getattr(model, "ckpt_path", "") or "yolov8n.pt")
+    # First run may download the weights; keep a copy in models/ for the live test.
+    model = YOLO(path.name)
+    downloaded = Path(getattr(model, "ckpt_path", "") or path.name)
     if downloaded.exists() and downloaded.resolve() != path.resolve():
         try:
             path.write_bytes(downloaded.read_bytes())
@@ -60,14 +64,37 @@ def _keep_box(x1, y1, x2, y2, image_width, image_height) -> bool:
     return relative_area >= MIN_BOX_RELATIVE_AREA
 
 
+def _crop_mask(polygon, box: tuple[int, int, int, int]) -> np.ndarray | None:
+    """Rasterise a car outline (image coords) into a boolean mask of the crop."""
+
+    x1, y1, x2, y2 = box
+    if polygon is None or len(polygon) < 3:
+        return None
+    mask = np.zeros((y2 - y1, x2 - x1), dtype=np.uint8)
+    points = np.round(np.asarray(polygon) - (x1, y1)).astype(np.int32)
+    cv2.fillPoly(mask, [points], 1)
+    if not mask.any():
+        return None
+    return mask.astype(bool)
+
+
 def detect_cars(image: Image.Image, detector) -> list[dict]:
-    """Return kept vehicle boxes in pixel coordinates (xyxy)."""
+    """Return kept vehicles: box (xyxy pixels), confidence and, with a
+    segmentation detector, ``mask`` - a boolean array the size of the crop
+    that is True on this car's own pixels (``None`` for box-only detectors).
+    """
 
     image_width, image_height = image.size
     results = detector.predict(
-        source=np.array(image.convert("RGB")),
+        # Pass the PIL image itself: ultralytics treats a NumPy array as BGR,
+        # so np.array(rgb_image) showed the detector a red/blue-swapped photo
+        # and it missed or under-scored cars.
+        source=image.convert("RGB"),
         conf=DETECT_CONFIDENCE,
         classes=VEHICLE_CLASS_IDS,
+        # One vehicle is often boxed as both "car" and "truck"; merge across
+        # classes so it is reported once, not twice.
+        agnostic_nms=True,
         verbose=False,
     )
 
@@ -79,7 +106,10 @@ def detect_cars(image: Image.Image, detector) -> list[dict]:
     if boxes is None:
         return cars
 
-    for box in boxes:
+    masks = results[0].masks
+    polygons = masks.xy if masks is not None else [None] * len(boxes)
+
+    for box, polygon in zip(boxes, polygons):
         x1, y1, x2, y2 = box.xyxy[0].tolist()
         x1 = int(max(0, min(image_width - 1, x1)))
         y1 = int(max(0, min(image_height - 1, y1)))
@@ -93,9 +123,17 @@ def detect_cars(image: Image.Image, detector) -> list[dict]:
             {
                 "box": (x1, y1, x2, y2),
                 "detect_confidence": float(box.conf[0].item()),
+                "mask": _crop_mask(polygon, (x1, y1, x2, y2)),
             }
         )
 
+    if cars:
+        def area(item):
+            x1, y1, x2, y2 = item["box"]
+            return (x2 - x1) * (y2 - y1)
+
+        largest = max(area(item) for item in cars)
+        cars = [item for item in cars if area(item) >= MIN_AREA_VS_LARGEST * largest]
     cars.sort(key=lambda item: item["detect_confidence"], reverse=True)
     return cars
 

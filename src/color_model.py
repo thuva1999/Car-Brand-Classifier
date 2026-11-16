@@ -15,7 +15,6 @@ from config import (
     COLOR_MODEL_CONFIDENCE,
     COLOR_MODEL_PATH,
     COLOR_NAMES_PATH,
-    COLOUR_ALIASES,
     COLOUR_NAMES,
     IMAGE_SIZE,
 )
@@ -90,83 +89,186 @@ def load_color_model(model_path: Path | None = None, device: torch.device | None
     return model, class_names, color_transform(), device
 
 
-def _body_roi(bgr: np.ndarray) -> np.ndarray:
-    height, width = bgr.shape[:2]
-    y1, y2 = int(height * 0.32), int(height * 0.76)
-    x1, x2 = int(width * 0.15), int(width * 0.85)
-    crop = bgr[y1:y2, x1:x2]
-    if crop.size == 0:
-        return bgr
-    return crop
+def _body_band(height: int, width: int) -> tuple[slice, slice]:
+    # Doors/bonnet band: skip roof and windscreen above, wheels and road below.
+    rows = slice(int(height * 0.30), int(height * 0.70))
+    cols = slice(int(width * 0.15), int(width * 0.85))
+    return rows, cols
 
 
-def hsv_colour(crop: Image.Image) -> str:
-    """Map HSV paint pixels in the central body region to an exam colour.
+def _paint_pixels(bgr: np.ndarray, mask: np.ndarray | None) -> np.ndarray:
+    """HSV pixels (N x 3) that most likely show this car's paint.
 
-    Maroon maps to red, orange to yellow, silver to grey, and beige/gold to
-    brown so predictions remain within the exam's eight scored classes.
+    Without a mask: the fixed body band. With a car mask: the band restricted
+    to this car's outline (eroded so edge pixels bleeding into road or a
+    neighbouring car are dropped). Falls back to the whole eroded mask, then
+    to the plain band, if the overlap is too small to trust.
+    """
+
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    height, width = hsv.shape[:2]
+    rows, cols = _body_band(height, width)
+    band = np.zeros((height, width), dtype=bool)
+    band[rows, cols] = True
+    band_hsv = hsv[band] if band.any() else hsv.reshape(-1, 3)
+
+    if mask is None or mask.shape != (height, width) or not mask.any():
+        return band_hsv
+
+    radius = max(1, int(min(height, width) * 0.03))
+    kernel = np.ones((2 * radius + 1, 2 * radius + 1), dtype=np.uint8)
+    car = cv2.erode(mask.astype(np.uint8), kernel).astype(bool)
+    if not car.any():
+        car = mask
+
+    minimum = max(100, int(band.sum() * 0.15))
+    for selection in (car & band, car):
+        if selection.sum() >= minimum:
+            return hsv[selection]
+    return band_hsv
+
+
+def _warm_fraction(hsv_pixels: np.ndarray) -> float:
+    """Share of well-lit pixels with a warm (orange/beige) tint."""
+
+    hue = hsv_pixels[:, 0].astype(np.int32)
+    saturation = hsv_pixels[:, 1].astype(np.int32)
+    value = hsv_pixels[:, 2].astype(np.int32)
+    well_lit = (value >= 60) & (value <= 235)
+    warm = well_lit & (saturation >= 30) & (hue >= 11) & (hue <= 30)
+    return float(np.count_nonzero(warm)) / max(len(hsv_pixels), 1)
+
+
+def scene_warmth(
+    image: Image.Image, boxes: list[tuple[int, int, int, int]]
+) -> float | None:
+    """Warm fraction of the photo's background (everything outside car boxes).
+
+    Golden-hour sun or a warm camera setting tints white paint cream, which
+    looks like beige. If the road and buildings are just as warm, the warmth
+    comes from the light, not the paint. None when cars fill the photo.
+    """
+
+    rgb = np.array(image.convert("RGB"))
+    background = np.ones(rgb.shape[:2], dtype=bool)
+    for x1, y1, x2, y2 in boxes:
+        background[y1:y2, x1:x2] = False
+    if background.sum() < background.size * 0.05:
+        return None
+    hsv = cv2.cvtColor(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), cv2.COLOR_BGR2HSV)
+    return _warm_fraction(hsv[background])
+
+
+def hsv_colour(
+    crop: Image.Image,
+    mask: np.ndarray | None = None,
+    scene_warm: float | None = None,
+) -> str:
+    """Pick one of the eight exam colours from the car's paint pixels."""
+
+    return hsv_colour_with_confidence(crop, mask, scene_warm)[0]
+
+
+def _rule_confidence(margin: float) -> float:
+    """Map how far a measurement is past its decision threshold (0 = right on
+    the line, 1 = comfortably past it) to a 0.50-0.95 confidence. Capped at
+    0.95 because these are hand-tuned rules, not a calibrated probability."""
+
+    return round(0.50 + 0.45 * float(np.clip(margin, 0.0, 1.0)), 2)
+
+
+def hsv_colour_with_confidence(
+    crop: Image.Image,
+    mask: np.ndarray | None = None,
+    scene_warm: float | None = None,
+) -> tuple[str, float]:
+    """Pick one of the eight exam colours and say how clear-cut the call was.
+
+    ``mask`` (optional) is a boolean array the size of the crop, True on this
+    car's own pixels (from YOLO segmentation). It stops a neighbouring car,
+    road or wall inside the box from voting.
+
+    Tuned on Tashkent street photos, where the camera adds a bluish cast:
+    grey/white/black paint and sky reflections show up as hue ~104 with
+    saturation 30-60. So:
+
+    1. Red, yellow, green or blue must cover >= 15% of the paint pixels
+       with well-lit, saturated pixels. Blue needs S >= 100, because the cast
+       sits in the blue hue range; red and green are cast-free, so S >= 60 is
+       enough (dull lime/olive paint in shade). Yellow needs S >= 140 so beige
+       is not mistaken for it.
+    2. Beige/gold/brown paint is warm but dull, so it is detected separately:
+       warm hue (11-30) with S >= 30 covering >= 25% of the paint pixels,
+       and at least 0.15 more than the background (``scene_warm``, from
+       ``scene_warmth``) so warm sunlight on white paint is not called brown.
+    3. Otherwise the car is neutral and the median brightness decides
+       black / grey / white. Black paint reflects a lot, so its median V is
+       typically 20-65, not near 0. Shaded white (V 150-175) is told apart
+       from silver by its lower saturation.
     """
 
     bgr = cv2.cvtColor(np.array(crop.convert("RGB")), cv2.COLOR_RGB2BGR)
-    body = _body_roi(bgr)
-    hsv = cv2.cvtColor(body, cv2.COLOR_BGR2HSV)
+    pixels = _paint_pixels(bgr, mask).astype(np.int32)
+    if len(pixels) == 0:
+        raise ValueError("No usable body pixels for HSV colour voting.")
 
-    hue = hsv[:, :, 0].astype(np.int32).ravel()
-    saturation = hsv[:, :, 1].astype(np.int32).ravel()
-    value = hsv[:, :, 2].astype(np.int32).ravel()
-    usable = value >= 0
-    if not np.any(usable):
-        usable = np.ones_like(value, dtype=bool)
+    hue, saturation, value = pixels[:, 0], pixels[:, 1], pixels[:, 2]
+    total = len(pixels)
 
-    hue = hue[usable]
-    saturation = saturation[usable]
-    value = value[usable]
+    well_lit = (value >= 60) & (value <= 235)
+    saturated = well_lit & (saturation >= 60)
+    strong = well_lit & (saturation >= 100)
+    strong_counts = {
+        "red": int(np.count_nonzero(saturated & ((hue <= 10) | (hue >= 170)))),
+        "yellow": int(
+            np.count_nonzero(
+                well_lit & (hue >= 20) & (hue <= 35)
+                & (saturation >= 140) & (value >= 145)
+            )
+        ),
+        "green": int(np.count_nonzero(saturated & (hue >= 36) & (hue <= 84))),
+        "blue": int(np.count_nonzero(strong & (hue >= 85) & (hue <= 169))),
+    }
+    best = max(strong_counts, key=strong_counts.get)
+    best_fraction = strong_counts[best] / total
+    if best_fraction >= 0.15:
+        return best, _rule_confidence((best_fraction - 0.15) / 0.35)
 
-    median_v = float(np.median(value))
-    median_s = float(np.median(saturation))
-    if median_v < 65 or (median_v < 90 and median_s < 60):
-        return "black"
+    warm_fraction = _warm_fraction(pixels)
+    warmer_than_scene = (
+        1.0 if scene_warm is None else (warm_fraction - scene_warm - 0.15) / 0.15
+    )
+    if warm_fraction >= 0.25 and warmer_than_scene >= 0:
+        margin = min((warm_fraction - 0.25) / 0.35, warmer_than_scene)
+        return "brown", _rule_confidence(margin)
+    if warm_fraction >= 0.25:
+        # Warm because of the light: judge it as a neutral car, and do not
+        # count the tint against the neutral answer below.
+        warm_fraction = 0.0
 
-    def bucket(h: int, s: int, v: int) -> str:
-        if s < 35:
-            if v < 90:
-                return "black"
-            if v >= 215:
-                return "white"
-            if 10 <= h <= 36 and s >= 12 and v > 130:
-                return "beige"
-            if v > 165:
-                return "silver"
-            return "grey"
-        if h <= 8 or h >= 170:
-            return "maroon" if v < 120 else "red"
-        if 9 <= h <= 36 and s >= 100:
-            if h <= 19:
-                return "brown" if v < 210 else "orange"
-            if h <= 24:
-                return "gold"
-            return "yellow" if v >= 150 else "gold"
-        if 9 <= h <= 36:
-            return "gold" if s >= 35 else "beige"
-        if v < 40:
-            return "black"
-        if h <= 85:
-            return "green"
-        if h <= 135:
-            return "blue"
-        if h <= 169:
-            return "purple"
-        return "maroon"
+    # Neutral: less sure when a colour almost won the votes above.
+    colour_closeness = 1.0 - max(best_fraction / 0.15, warm_fraction / 0.25)
 
-    votes = []
-    for h, s, v in zip(hue, saturation, value):
-        name = bucket(int(h), int(s), int(v))
-        votes.append(COLOUR_ALIASES.get(name, name))
-    counts = {name: 0 for name in COLOUR_NAMES}
-    for name in votes:
-        if name in counts:
-            counts[name] += 1
-    return max(counts, key=counts.get)
+    median_value = float(np.median(value))
+    if median_value < 65:
+        margin = (65 - median_value) / 40
+        return "black", _rule_confidence(min(margin, colour_closeness))
+    if median_value >= 175:
+        margin = (median_value - 175) / 40
+        return "white", _rule_confidence(min(margin, colour_closeness))
+    # White paint in shade drops to V ~150-175, overlapping silver. Silver /
+    # grey metallic picks up the bluish sky cast (body S ~40-55), while white
+    # paint stays almost colourless (S ~10-25). Ignore glass/tyres (V < 60).
+    body = value >= 60
+    body_saturation = float(np.median(saturation[body])) if body.any() else 0.0
+    if median_value >= 150 and body_saturation < 28:
+        margin = min((median_value - 150) / 25, (28 - body_saturation) / 15)
+        return "white", _rule_confidence(min(margin, colour_closeness))
+
+    margin = min(median_value - 65, 175 - median_value) / 40
+    if median_value >= 150:
+        margin = min(margin, (body_saturation - 28) / 15)
+    return "grey", _rule_confidence(min(margin, colour_closeness))
 
 
 def predict_color(
@@ -175,9 +277,11 @@ def predict_color(
     class_names: list[str] | None = None,
     image_transform=None,
     device=None,
+    mask: np.ndarray | None = None,
+    scene_warm: float | None = None,
 ) -> tuple[str, float]:
     if model is None:
-        return hsv_colour(crop), 0.0
+        return hsv_colour_with_confidence(crop, mask, scene_warm)
 
     image_tensor = image_transform(crop.convert("RGB")).unsqueeze(0).to(device)
     with torch.no_grad():
@@ -190,5 +294,5 @@ def predict_color(
         colour = "grey"
     confidence_value = float(confidence.item())
     if confidence_value < COLOR_MODEL_CONFIDENCE:
-        return hsv_colour(crop), 0.0
+        return hsv_colour_with_confidence(crop, mask, scene_warm)
     return colour, confidence_value

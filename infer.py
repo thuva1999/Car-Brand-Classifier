@@ -34,8 +34,12 @@ def print_predictions(image_name: str, predictions: list[dict]) -> None:
         print("No cars detected.")
         return
 
-    for item in predictions:
-        print(f"{item['brand']} — {item['colour']}")
+    for number, item in enumerate(predictions, start=1):
+        print(
+            f"Car {number}: {item['brand']} ({item['brand_confidence']:.0%})"
+            f" — {item['colour']} ({item['colour_confidence']:.0%})"
+            f"   [detected {item['detect_confidence']:.0%}]"
+        )
 
 def run_image(
     pipeline: CarPipeline,
@@ -122,8 +126,12 @@ def main() -> None:
     parser.add_argument(
         "--brand-model",
         type=Path,
+        nargs="+",
         default=BRAND_MODEL_PATH,
-        help="Brand checkpoint to use (defaults to the current stable model).",
+        help=(
+            "Brand checkpoint(s) to use (defaults to the active model in config). "
+            "Several paths run as an ensemble."
+        ),
     )
     parser.add_argument(
         "--crop",

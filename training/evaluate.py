@@ -17,7 +17,7 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = PROJECT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from brand_model import brand_transform, load_brand_model  # noqa: E402
+from brand_model import BrandEnsemble, brand_probabilities, load_brand_model  # noqa: E402
 from config import (  # noqa: E402
     BRAND_CANDIDATE_MODEL_PATH,
     BRAND_MODEL_PATH,
@@ -35,9 +35,14 @@ def evaluate_brand(
     validation_dir: Path = SPLIT_BRAND_DIR / "val",
 ) -> None:
     model, class_names, image_transform, device = load_brand_model(model_path=model_path)
+    ensemble = isinstance(model, BrandEnsemble)
+    if ensemble:
+        print(f"Evaluating {model}")
+    # Use the checkpoint's own preprocessing (stretch for old models, pad for new).
+    # An ensemble gets PIL images and lets each member preprocess its own way.
     val_dataset = datasets.ImageFolder(
         validation_dir,
-        transform=brand_transform(),
+        transform=None if ensemble else image_transform,
     )
     normalized_model_names = [normalize_label(name) for name in class_names]
     if len(set(normalized_model_names)) != len(normalized_model_names):
@@ -50,7 +55,14 @@ def evaluate_brand(
         print(" folders:", val_dataset.classes)
         print(" model:  ", class_names)
 
-    loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=0)
+    if ensemble:
+        def batches():
+            for start in range(0, len(val_dataset), 16):
+                items = [val_dataset[i] for i in range(start, min(start + 16, len(val_dataset)))]
+                yield [image for image, _ in items], torch.tensor([label for _, label in items])
+        loader = batches()
+    else:
+        loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=0)
     number = len(class_names)
     matrix = [[0 for _ in range(number)] for _ in range(number)]
     correct = 0
@@ -62,10 +74,11 @@ def evaluate_brand(
     model.eval()
     with torch.no_grad():
         for images, labels in loader:
-            images = images.to(device)
-            labels = labels.to(device)
-            outputs = model(images)
-            predicted = outputs.argmax(1)
+            # Same flip-averaging the live pipeline uses.
+            if ensemble:
+                predicted = model.probabilities_for_crops(images, device, tta=True).argmax(1)
+            else:
+                predicted = brand_probabilities(model, images.to(device), tta=True).argmax(1)
             for true_index, pred_index in zip(labels.tolist(), predicted.tolist()):
                 true_label = normalize_label(val_dataset.classes[true_index])
                 model_true_index = model_index_by_label.get(true_label)
@@ -98,7 +111,8 @@ def evaluate_brand(
 
     output_dir = PROJECT_DIR / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
-    model_suffix = Path(model_path).stem
+    paths = model_path if isinstance(model_path, (list, tuple)) else [model_path]
+    model_suffix = "+".join(Path(path).stem for path in paths)
     csv_path = output_dir / f"brand_confusion_matrix_{model_suffix}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
@@ -144,9 +158,11 @@ def main() -> None:
     parser.add_argument(
         "--model",
         type=Path,
+        nargs="+",
         default=BRAND_MODEL_PATH,
         help=(
-            "Brand checkpoint to evaluate. The candidate checkpoint is available at "
+            "Brand checkpoint(s) to evaluate; several paths are evaluated as an "
+            "ensemble. The candidate checkpoint is available at "
             f"{BRAND_CANDIDATE_MODEL_PATH} after training."
         ),
     )
