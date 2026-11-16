@@ -81,6 +81,14 @@ class HsvColourTests(unittest.TestCase):
         # Real black cars in street photos have median V around 20-65.
         self.assertEqual(hsv_colour(solid_hsv_image(0, 0, 45)), "black")
 
+    def test_dark_saturated_teal_paint_is_black_not_grey(self):
+        # Live photo 16 Nov: dark green Leapmotor C16, median V ~88, S ~87-126,
+        # hue ~98; too few pixels pass the blue vote (S >= 100).
+        self.assertEqual(hsv_colour(solid_hsv_image(98, 90, 88)), "black")
+
+    def test_dark_grey_with_blue_cast_stays_grey(self):
+        self.assertEqual(hsv_colour(solid_hsv_image(106, 45, 95)), "grey")
+
     def test_mid_neutral_paint_is_grey(self):
         self.assertEqual(hsv_colour(solid_hsv_image(0, 0, 90)), "grey")
 

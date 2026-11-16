@@ -5,7 +5,7 @@ CSAI-3210 midterm pipeline. A phone photo of a Tashkent street goes in. The lapt
 Architecture:
 
 1. **YOLO11n-seg** pretrained on COCO finds cars and trucks and outlines each one (detector only). Overlapping "car" and "truck" boxes for the same vehicle are merged. If `models/yolo11n-seg.pt` is missing, the first run downloads it (needs internet).
-2. Each crop goes through a **brand ensemble** of two models, **24 brands**: a frozen **DINOv2 ViT-S/14** with a trained linear head (`models/car_brand_classifier_candidate_v3.pth`) and **MobileNetV3-Small** fine-tuned on our brand folders (`models/car_brand_classifier_candidate_v2.pth`). Their brand probabilities are averaged 40% / 60%.
+2. Each crop goes through a **brand ensemble** of two models, **24 brands**: a frozen **DINOv2 ViT-S/14** with a trained linear head (`models/car_brand_classifier_candidate_v3.pth`) and **MobileNetV3-Small** fine-tuned on our brand folders (`models/car_brand_classifier_candidate_v2.pth`). Their brand probabilities are averaged 60% DINOv2 / 40% MobileNet.
 3. Colour uses **HSV rules** on the car's own pixels (its segmentation outline, door/bonnet band). No colour model has been trained yet: `data/color_dataset` is empty. The code would use a trained colour model only if `models/car_color_classifier.pth` existed and was at least 0.70 confident.
 4. Small or low-confidence boxes are dropped. Every prediction prints its brand, colour and detection confidence.
 
@@ -167,9 +167,12 @@ python training\evaluate.py
 |---|---|---|---|---|
 | candidate_v2 (MobileNet) alone | 51.5% | 49.0% | 51.0% | 48.6% |
 | candidate_v3 (DINOv2) alone | 46.5% | 53.5% | 42.4% | 53.4% |
-| **ensemble, 40% DINOv2 / 60% MobileNet (active)** | **56.1%** | **57.1%** | **54.8%** | **55.3%** |
+| ensemble, 40% DINOv2 / 60% MobileNet | 56.1% | 57.1% | 54.8% | 55.3% |
+| **ensemble, 60% DINOv2 / 40% MobileNet (active)** | **55.0%** | **57.7%** | **51.9%** | **57.5%** |
 
-Every DINOv2 weight from 0.3 to 0.6 beat both single models; 0.4 was chosen on this validation split, so the ensemble numbers are slightly optimistic. Biggest per-brand gains over v2 alone: Lexus 67→80%, Nissan 41→52%, Hyundai 49→66%, BMW 60→68%, Chevrolet 59→67%. Still weak: Changan 31%, Chery 30%, Honda 29%. Reproduce with `python training\evaluate.py`.
+Every DINOv2 weight from 0.3 to 0.6 beat both single models on this split. 0.4 scores best on listing photos, but DINOv2 holds up better on phone photos of a screen (the live test): on 7 hand-checked live cars (16 Nov) DINOv2 alone was right on a Leapmotor, a Jetour X70 and a Chery sedan where MobileNet was not, and 0.6 gets 2/7 against 0/7 at 0.4. So 0.6 is active. Biggest per-brand gains of the ensemble over v2 alone (at 0.5): Lexus 67→80%, Nissan 41→52%, Hyundai 49→66%, BMW 60→68%, Chevrolet 59→67%. Still weak: Changan, Chery, Honda. Reproduce with `python training\evaluate.py`.
+
+**Known data gap:** the Chery training images have **no Tiggo** (they are Fulwin T9, Unbounded Pro, eQ7 and old CompCars photos), but Tiggo 7 Pro / 8 Pro and Arrizo are the Chery cars on Uzbek streets; all four Tiggo/Arrizo cars in the 16 Nov live photos were wrong at every ensemble weight. Changan images are mostly Qiyuan models. Jetour (13 images) and Leapmotor (29) are too small. Add photos of those models to `data/brand_dataset/<Brand>/`, then clean, split and retrain.
 
 ### Earlier brand results (candidate_v1, 22 brands)
 

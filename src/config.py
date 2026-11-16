@@ -33,19 +33,22 @@ LABELS_CSV = DATA_DIR / "labels" / "cars.csv"
 #
 # Active brand model: ensemble of candidate_v3 (frozen DINOv2 ViT-S/14 + linear
 # head, training/train_brand_dinov2.py) and candidate_v2 (MobileNetV3-Small).
-# Both run on every car; brand probabilities are averaged 40% DINOv2 / 60%
+# Both run on every car; brand probabilities are averaged 60% DINOv2 / 40%
 # MobileNet. On split_dataset_candidate_v2 val (1,057 images):
 #   v2 alone 51.5% (balanced 49.0%), v3 alone 46.5% (53.5%),
-#   ensemble 56.1% (57.1%). On the 549 val images no model trained on:
-#   v2 51.0% (48.6%), v3 42.4% (53.4%), ensemble 54.8% (55.3%).
-# Any DINOv2 weight from 0.3 to 0.6 beat both single models.
+#   ensemble 0.4/0.6 56.1% (57.1%), ensemble 0.6/0.4 55.0% (57.7%).
+# DINOv2 is weighted higher because it holds up better on phone photos of a
+# screen (the live test): on 7 hand-checked live cars (16 Nov) DINOv2 alone
+# was right on Leapmotor, Jetour and a Chery sedan where MobileNet was not;
+# 0.6 gets 2/7 vs 0/7 at 0.4, for ~1 point less on listing-photo val.
+# Any DINOv2 weight from 0.3 to 0.6 beat both single models on val.
 # A list of checkpoints runs as an ensemble with BRAND_ENSEMBLE_WEIGHTS (same
 # order); a single path runs that model alone.
 BRAND_MODEL_PATH = [
     MODELS_DIR / "car_brand_classifier_candidate_v3.pth",
     MODELS_DIR / "car_brand_classifier_candidate_v2.pth",
 ]
-BRAND_ENSEMBLE_WEIGHTS = [0.4, 0.6]
+BRAND_ENSEMBLE_WEIGHTS = [0.6, 0.4]
 # Where the next training run saves (kept separate from the active model).
 BRAND_CANDIDATE_MODEL_PATH = MODELS_DIR / "car_brand_classifier_candidate_v4.pth"
 # Pretrained DINOv2 ViT-S/14 weights (timm format) for the "dinov2_vits14" backbone.

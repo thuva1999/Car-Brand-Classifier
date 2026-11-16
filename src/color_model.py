@@ -203,8 +203,10 @@ def hsv_colour_with_confidence(
        ``scene_warmth``) so warm sunlight on white paint is not called brown.
     3. Otherwise the car is neutral and the median brightness decides
        black / grey / white. Black paint reflects a lot, so its median V is
-       typically 20-65, not near 0. Shaded white (V 150-175) is told apart
-       from silver by its lower saturation.
+       typically 20-65, not near 0. A dark car (V < 110) whose lit pixels are
+       strongly saturated (S >= 75) is dark-coloured paint such as greenish
+       black, not grey: black. Shaded white (V 150-175) is told apart from
+       silver by its lower saturation.
     """
 
     bgr = cv2.cvtColor(np.array(crop.convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -253,14 +255,20 @@ def hsv_colour_with_confidence(
     if median_value < 65:
         margin = (65 - median_value) / 40
         return "black", _rule_confidence(min(margin, colour_closeness))
+    # Very dark green/blue/teal paint (e.g. "greenish black") is too dark for
+    # the colour votes above but far too saturated to be grey paint (grey with
+    # the camera's blue cast sits at S ~30-55). Call it black.
+    lit_body = value >= 60
+    body_saturation = float(np.median(saturation[lit_body])) if lit_body.any() else 0.0
+    if median_value < 110 and body_saturation >= 75:
+        margin = min((110 - median_value) / 40, (body_saturation - 75) / 40)
+        return "black", _rule_confidence(min(margin, colour_closeness))
     if median_value >= 175:
         margin = (median_value - 175) / 40
         return "white", _rule_confidence(min(margin, colour_closeness))
     # White paint in shade drops to V ~150-175, overlapping silver. Silver /
     # grey metallic picks up the bluish sky cast (body S ~40-55), while white
     # paint stays almost colourless (S ~10-25). Ignore glass/tyres (V < 60).
-    body = value >= 60
-    body_saturation = float(np.median(saturation[body])) if body.any() else 0.0
     if median_value >= 150 and body_saturation < 28:
         margin = min((median_value - 150) / 25, (28 - body_saturation) / 15)
         return "white", _rule_confidence(min(margin, colour_closeness))
