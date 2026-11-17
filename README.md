@@ -5,7 +5,7 @@ CSAI-3210 midterm pipeline. A phone photo of a Tashkent street goes in. The lapt
 Architecture:
 
 1. **YOLO11n-seg** pretrained on COCO finds cars and trucks and outlines each one (detector only). Overlapping "car" and "truck" boxes for the same vehicle are merged. If `models/yolo11n-seg.pt` is missing, the first run downloads it (needs internet).
-2. Each crop goes through a **brand ensemble** of two models, **24 brands**: a frozen **DINOv2 ViT-S/14** with a trained linear head (`models/car_brand_classifier_candidate_v3.pth`) and **MobileNetV3-Small** fine-tuned on our brand folders (`models/car_brand_classifier_candidate_v2.pth`). Their brand probabilities are averaged 60% DINOv2 / 40% MobileNet.
+2. Each crop goes through a **brand ensemble** of two models, **25 brands**: a frozen **DINOv2 ViT-S/14** with a trained linear head (`models/car_brand_classifier_candidate_v5.pth`) and **MobileNetV3-Small** fine-tuned on our brand folders (`models/car_brand_classifier_candidate_v6.pth`). Their brand probabilities are averaged 60% DINOv2 / 40% MobileNet.
 3. Colour uses **HSV rules** on the car's own pixels (its segmentation outline, door/bonnet band). No colour model has been trained yet: `data/color_dataset` is empty. The code would use a trained colour model only if `models/car_color_classifier.pth` existed and was at least 0.70 confident.
 4. Small or low-confidence boxes are dropped. Every prediction prints its brand, colour and detection confidence.
 
@@ -19,7 +19,7 @@ venv\Scripts\activate
 python infer.py path\to\photo.jpg
 ```
 
-The default brand model is the DINOv2 + MobileNet ensemble (`candidate_v3` + `candidate_v2`, 24 brands), set by `BRAND_MODEL_PATH` and `BRAND_ENSEMBLE_WEIGHTS` in `src/config.py`. Set `BRAND_MODEL_PATH` to a single checkpoint to run that model alone.
+The default brand model is the DINOv2 + MobileNet ensemble (`candidate_v5` + `candidate_v6`, 25 brands), set by `BRAND_MODEL_PATH` and `BRAND_ENSEMBLE_WEIGHTS` in `src/config.py`. Set `BRAND_MODEL_PATH` to a single checkpoint to run that model alone.
 
 Example output (`data\tashkent_test\IMG_20261023_164620.jpg`):
 
@@ -35,8 +35,8 @@ Brand % is the model's softmax probability. Colour % says how clearly the HSV ru
 To select a specific brand checkpoint, or several to run as an equal-weight ensemble:
 
 ```bat
-python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v2.pth
-python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v3.pth models\car_brand_classifier_candidate_v2.pth
+python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v6.pth
+python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v5.pth models\car_brand_classifier_candidate_v6.pth
 ```
 
 For a single image that is already cropped to one car, skip YOLO explicitly:
@@ -99,8 +99,9 @@ python infer.py data\tashkent_test\IMG_20261023_164608.jpg
 
 Weights:
 
-- `models/car_brand_classifier_candidate_v3.pth` — **brand model, part 1**: DINOv2 ViT-S/14 + linear head (24 brands), trained on `data/split_dataset_candidate_v2` by `training/train_brand_dinov2.py`
-- `models/car_brand_classifier_candidate_v2.pth` — **brand model, part 2**: MobileNetV3-Small (24 brands), trained on `data/split_dataset_candidate_v2`
+- `models/car_brand_classifier_candidate_v5.pth` — **brand model, part 1**: DINOv2 ViT-S/14 + linear head (25 brands), trained on `data/split_dataset_candidate_v6` by `training/train_brand_dinov2.py`
+- `models/car_brand_classifier_candidate_v6.pth` — **brand model, part 2**: MobileNetV3-Small (25 brands), trained on `data/split_dataset_candidate_v6`
+- `models/car_brand_classifier_candidate_v3.pth`, `models/car_brand_classifier_candidate_v2.pth` — previous ensemble (24 brands, trained on `data/split_dataset_candidate_v2`), kept for comparison
 - `models/dinov2_vits14_224.pth` — pretrained DINOv2 weights, needed only to train a new DINOv2 head
 - `models/car_brand_classifier_candidate_v1.pth` — previous MobileNet model (22 brands), kept for comparison
 - `models/yolo11n-seg.pt` — detector with car outlines, required on test day
@@ -155,11 +156,30 @@ python training\evaluate.py
 
 `train_brand_classifier.py` pads each crop to a square instead of stretching it, uses AdamW with warmup and cosine decay, label smoothing 0.1, oversampling of small brands capped at 3x, and keeps the checkpoint with the best *balanced* (per-brand average) validation accuracy. `--arch mobilenet_v3_large` or `--arch efficientnet_b0` and `--image-size` select a bigger backbone or input. Each checkpoint stores its architecture, image size and preprocessing, so older stretched-input checkpoints still load correctly. Inference and `evaluate.py` average predictions over the crop and its mirror image.
 
-`split_dataset.py` skips a brand with fewer than 8 images or listed in `EXCLUDED_BRANDS`, and writes the split configured as `SPLIT_BRAND_DIR` (currently `data/split_dataset_candidate_v1/`); it never deletes an existing split. `train_brand_classifier.py` writes the next model to `BRAND_CANDIDATE_MODEL_PATH`, keeping the active model unchanged. `python training\evaluate.py` evaluates the active model on that split and prints validation accuracy, per-brand accuracy, a confusion matrix (also saved under `outputs/`), and a dry run on `data/tashkent_test`.
+`split_dataset.py` skips a brand with fewer than 8 images or listed in `EXCLUDED_BRANDS`, and writes the split configured as `SPLIT_BRAND_DIR` (currently `data/split_dataset_candidate_v6/`); it never deletes an existing split. `train_brand_classifier.py` writes the next model to `BRAND_CANDIDATE_MODEL_PATH`, keeping the active model unchanged. `python training\evaluate.py` evaluates the active model on that split and prints validation accuracy, per-brand accuracy, a confusion matrix (also saved under `outputs/`), and a dry run on `data/tashkent_test`.
 
 `training/remove_brands.py` copies a trained checkpoint and removes the output rows of the given brands, so the copy can only choose among the remaining ones. It does not retrain.
 
-### Brand results (active: DINOv2 + MobileNet ensemble, 24 brands)
+### Brand results (active: DINOv2 + MobileNet ensemble, 25 brands)
+
+Retrained on 16 Nov after adding Daewoo, Jetour, Lada, Leapmotor, Changan and Chery photos and re-cleaning the dataset. `candidate_v5` (frozen DINOv2 ViT-S/14 + linear head) and `candidate_v6` (MobileNetV3-Small, 40 epochs) were both trained on `data/split_dataset_candidate_v6` (4,335 train / 1,141 validation, 25 brands including Lada).
+
+| Model | Accuracy | Balanced accuracy |
+|---|---|---|
+| candidate_v5 (DINOv2) alone | 47.0% | 59.2% |
+| candidate_v6 (MobileNet) alone | 53.5% | 57.4% |
+| ensemble, equal weights | 56.7% (647/1141) | — |
+
+Comparison with the previous ensemble (`candidate_v3` + `candidate_v2`), both at 60% DINOv2 / 40% MobileNet, on the 400 validation images that were not in the previous training split (741 of the 1,141 were, so the full split would flatter the old models):
+
+| Ensemble | Accuracy | Balanced accuracy |
+|---|---|---|
+| **candidate_v5 + candidate_v6 (active)** | **209/400 = 52.2%** | **70.9%** |
+| candidate_v3 + candidate_v2 (previous) | 190/400 = 47.5% | 54.7% |
+
+Gains on those images: BMW 43→49 of 60, Hyundai 5→9 of 11, Lexus 5→9 of 9, Kia 4→7 of 11, Lada 0→2 of 2 (new class). Changan got worse (28→21 of 101) and stays the weakest brand together with Chery (15 of 55): the two are mostly confused with each other, BYD, Geely and GAC Aion. Per-brand accuracy on the full validation split: Daewoo 100% (9 images), Li Auto 100% (6), Hongqi 96%, Deepal 91%, Jetour 89% (9), BMW 80%, Lexus 79%, Jaguar 76%, Zeekr 75%, Haval 68%, Nissan 67%, Chevrolet 65%, Mercedes-Benz 64%, Lada 60% (5), Leapmotor 59%, JAC 56%, Kia 55%, Hyundai 55%, Geely 54%, Honda 52%, BYD 49%, GAC Aion 41%, Dongfeng 31%, Chery 26%, Changan 25%. Reproduce with `python training\evaluate.py`.
+
+### Earlier brand results (candidate_v3 + candidate_v2, 24 brands)
 
 `candidate_v2` (MobileNetV3-Small, 40 epochs) and `candidate_v3` (frozen DINOv2 ViT-S/14 + linear head) were both trained on `data/split_dataset_candidate_v2` (3,937 train / 1,057 validation). DINOv2 is not fine-tuned: `train_brand_dinov2.py` extracts its features once (clean crop, mirror, one augmented copy; cached in `outputs/`) and trains only the head, because fine-tuning a ViT on a laptop CPU takes hours. The two models make different mistakes, so averaging their probabilities beats both:
 
@@ -168,9 +188,9 @@ python training\evaluate.py
 | candidate_v2 (MobileNet) alone | 51.5% | 49.0% | 51.0% | 48.6% |
 | candidate_v3 (DINOv2) alone | 46.5% | 53.5% | 42.4% | 53.4% |
 | ensemble, 40% DINOv2 / 60% MobileNet | 56.1% | 57.1% | 54.8% | 55.3% |
-| **ensemble, 60% DINOv2 / 40% MobileNet (active)** | **55.0%** | **57.7%** | **51.9%** | **57.5%** |
+| ensemble, 60% DINOv2 / 40% MobileNet | 55.0% | 57.7% | 51.9% | 57.5% |
 
-Every DINOv2 weight from 0.3 to 0.6 beat both single models on this split. 0.4 scores best on listing photos, but DINOv2 holds up better on phone photos of a screen (the live test): on 7 hand-checked live cars (16 Nov) DINOv2 alone was right on a Leapmotor, a Jetour X70 and a Chery sedan where MobileNet was not, and 0.6 gets 2/7 against 0/7 at 0.4. So 0.6 is active. Biggest per-brand gains of the ensemble over v2 alone (at 0.5): Lexus 67→80%, Nissan 41→52%, Hyundai 49→66%, BMW 60→68%, Chevrolet 59→67%. Still weak: Changan, Chery, Honda. Reproduce with `python training\evaluate.py`.
+Every DINOv2 weight from 0.3 to 0.6 beat both single models on this split. 0.4 scores best on listing photos, but DINOv2 holds up better on phone photos of a screen (the live test): on 7 hand-checked live cars (16 Nov) DINOv2 alone was right on a Leapmotor, a Jetour X70 and a Chery sedan where MobileNet was not, and 0.6 gets 2/7 against 0/7 at 0.4. So 0.6 was chosen, and is kept for the retrained models. Biggest per-brand gains of the ensemble over v2 alone (at 0.5): Lexus 67→80%, Nissan 41→52%, Hyundai 49→66%, BMW 60→68%, Chevrolet 59→67%. Still weak: Changan, Chery, Honda. Reproduce with `python training\evaluate.py`.
 
 **Known data gap:** the Chery training images have **no Tiggo** (they are Fulwin T9, Unbounded Pro, eQ7 and old CompCars photos), but Tiggo 7 Pro / 8 Pro and Arrizo are the Chery cars on Uzbek streets; all four Tiggo/Arrizo cars in the 16 Nov live photos were wrong at every ensemble weight. Changan images are mostly Qiyuan models. Jetour (13 images) and Leapmotor (29) are too small. Add photos of those models to `data/brand_dataset/<Brand>/`, then clean, split and retrain.
 
