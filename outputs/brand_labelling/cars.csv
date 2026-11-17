@@ -1,0 +1,108 @@
+number,photo,car_in_photo,box,true_colour,predicted_brand,brand_confidence,second_guess,true_brand
+1,20261113_112835.jpg,1,941 829 1345 1068,black,BYD,0.46,Geely,Chevrolet
+2,20261113_112835.jpg,2,597 822 968 1083,white,Chevrolet,0.32,BYD,Chevrolet
+3,20261113_112835.jpg,3,16 817 370 1168,brown,Daewoo,0.73,Chevrolet,Daewoo
+4,20261113_112835.jpg,4,1270 803 1433 1020,black,Haval,0.15,Lada,unknown
+5,20261113_114554.jpg,1,3 542 1421 1536,white,BYD,0.66,Deepal,BYD
+6,20261113_114752.jpg,1,527 118 2182 1167,white,BYD,0.56,GAC Aion,BYD
+7,20261113_114819.jpg,1,77 5 2255 1360,white,BYD,0.72,GAC Aion,BYD
+8,20261113_114915.jpg,1,206 354 2175 1366,white,BYD,0.62,Jetour,BYD
+9,20261113_115010.jpg,1,138 0 2551 1403,grey,Haval,0.22,BYD,BYD
+10,20261113_115144.jpg,1,126 467 2486 1356,brown,GAC Aion,0.26,Chery,Changan
+11,20261113_115518.jpg,1,90 493 986 1068,red,Chevrolet,0.54,Kia,Chevrolet
+12,20261113_115518.jpg,2,1329 412 2446 1178,blue,Chevrolet,0.54,Kia,Chevrolet
+13,20261113_115627.jpg,1,155 257 2470 1426,black,Changan,0.13,Chery,Hyundai
+14,20261113_115708.jpg,1,0 172 2284 1401,black,Chery,0.14,Changan,Hyundai
+15,20261113_205419.jpg,1,15 785 1188 1488,brown,Chevrolet,0.32,Kia,Chevrolet
+16,20261113_205501.jpg,1,429 316 1937 1168,white,Chevrolet,0.40,Kia,Chevrolet
+17,20261113_205543.jpg,1,5 682 1436 1782,black,BYD,0.64,Jaguar,BYD
+18,20261113_205642.jpg,1,330 149 2200 1403,black,BYD,0.74,Kia,BYD
+19,20261113_205717.jpg,1,3 319 1426 1515,black,BYD,0.75,Jetour,BYD
+20,20261113_205804.jpg,1,2 575 1416 1988,black,Chevrolet,0.50,Jetour,Chevrolet
+21,20261113_205835.jpg,1,1 514 1436 1893,black,Chevrolet,0.39,JAC,Chevrolet
+22,20261113_205915.jpg,1,1 457 1436 1895,black,Chevrolet,0.59,Jetour,Chevrolet
+23,20261113_205936.jpg,1,3 508 1436 1937,black,Chevrolet,0.41,Jetour,Chevrolet
+24,20261113_210015.jpg,1,213 939 635 1120,grey,Honda,0.32,Chevrolet,Lada
+25,20261113_210015.jpg,2,655 902 1151 1226,grey,Chevrolet,0.36,Mercedes-Benz,Daewoo
+26,20261113_210015.jpg,3,500 899 750 1045,white,Chevrolet,0.22,Nissan,unknown
+27,20261113_210114.jpg,1,466 279 2311 1156,black,Leapmotor,0.28,Chevrolet,Leapmotor
+28,20261113_210315.jpg,1,7 242 1991 1427,black,Leapmotor,0.35,GAC Aion,Leapmotor
+29,20261113_210341.jpg,1,328 324 2043 1166,black,GAC Aion,0.17,Chevrolet,Leapmotor
+30,20261113_210407.jpg,1,419 260 2235 1381,white,Chevrolet,0.86,JAC,Chevrolet
+31,20261113_210433.jpg,1,366 75 2476 1167,white,BYD,0.52,Chevrolet,Chevrolet
+32,20261113_210515.jpg,1,683 42 1809 1414,grey,BYD,0.40,Hyundai,BYD
+33,20261113_210551.jpg,1,692 10 1774 1277,grey,BYD,0.27,Hyundai,BYD
+34,20261113_210646.jpg,1,296 4 1915 1416,white,Haval,0.14,Jetour,Dongfeng
+35,20261113_210748.jpg,1,320 145 2175 976,grey,BMW,0.48,Hongqi,BMW
+36,20261113_210915.jpg,1,222 547 1226 1459,blue,Chevrolet,0.31,Jetour,Chevrolet
+37,20261113_210938.jpg,1,187 138 1869 1016,white,Chevrolet,0.43,BYD,Chevrolet
+38,20261113_211007.jpg,1,899 342 1700 770,white,Haval,0.11,Chery,Chery
+39,20261113_211103.jpg,1,526 358 1646 948,yellow,Jetour,0.26,GAC Aion,unknown
+40,20261113_211204.jpg,1,365 180 2058 1004,white,Dongfeng,0.77,Changan,Dongfeng
+41,20261113_211305.jpg,1,248 124 2337 1281,white,Dongfeng,0.15,Haval,Dongfeng
+42,20261113_211403.jpg,1,93 89 1862 1188,black,BYD,0.52,Geely,BYD
+43,20261113_211801.jpg,1,66 64 2187 1220,white,Daewoo,0.69,BYD,Daewoo
+44,20261113_211825.jpg,1,83 4 2415 1349,white,Daewoo,0.84,BYD,Daewoo
+45,20261113_211910.jpg,1,13 113 2558 1409,white,Dongfeng,0.13,Haval,Changan
+46,20261113_212003.jpg,1,61 292 2503 1288,white,Haval,0.29,Chevrolet,Hyundai
+47,20261113_212131.jpg,1,8 48 2448 1351,black,Kia,0.85,BYD,Kia
+48,20261113_212247.jpg,1,169 353 1975 1127,white,BMW,0.16,GAC Aion,GAC Aion
+49,20261113_212411.jpg,1,196 312 2170 1247,black,JAC,0.21,Changan,GAC Aion
+50,20261113_212432.jpg,1,59 1113 1124 1972,grey,Chery,0.26,Nissan,GAC Aion
+51,20261113_212457.jpg,1,24 848 1253 1835,black,Chery,0.26,GAC Aion,GAC Aion
+52,20261113_212536.jpg,1,32 898 1378 2117,black,Changan,0.36,JAC,GAC Aion
+53,20261114_095605.jpg,1,146 169 2176 1413,blue,Dongfeng,0.41,BYD,Dongfeng
+54,20261114_095637.jpg,1,321 110 2166 1355,blue,Dongfeng,0.32,BYD,Dongfeng
+55,20261114_095721.jpg,1,57 9 2288 1414,white,Dongfeng,0.46,BYD,Dongfeng
+56,20261114_095811.jpg,1,354 114 1906 1160,white,BYD,0.17,Deepal,Dongfeng
+57,20261114_095910.jpg,1,441 342 1936 1342,white,BYD,0.18,Deepal,Dongfeng
+58,20261114_100020.jpg,1,326 240 2188 1084,white,Zeekr,0.43,Changan,Zeekr
+59,20261114_100050.jpg,1,569 160 1937 1133,white,Changan,0.26,Geely,Zeekr
+60,20261114_100109.jpg,1,652 264 1781 1082,white,Changan,0.40,Geely,Zeekr
+61,20261114_100130.jpg,1,19 428 2318 1164,white,Zeekr,0.33,Leapmotor,Zeekr
+62,20261114_100159.jpg,1,315 348 2204 1171,white,Deepal,0.18,Changan,Zeekr
+63,20261114_100317.jpg,1,262 182 2169 1279,white,BMW,0.17,Chery,Geely
+64,20261114_100344.jpg,1,325 136 2088 1161,white,BMW,0.18,Hongqi,Geely
+65,20261114_100430.jpg,1,683 88 1338 577,grey,GAC Aion,0.60,Chery,Geely
+66,20261114_100603.jpg,1,583 332 1692 1286,white,Changan,0.18,Dongfeng,Geely
+67,20261114_100628.jpg,1,457 184 2230 1414,white,Leapmotor,0.15,Jetour,Geely
+68,20261114_100659.jpg,1,324 190 1881 1201,white,Kia,0.18,Dongfeng,Geely
+69,20261114_100759.jpg,1,36 269 2341 1292,white,BYD,0.24,Geely,Deepal
+70,20261114_100916.jpg,1,424 394 1572 1115,black,BYD,0.20,Hyundai,Deepal
+71,20261114_100935.jpg,1,767 294 1644 843,blue,Kia,0.14,Dongfeng,Deepal
+72,20261114_101024.jpg,1,31 130 2257 1216,grey,Kia,0.14,Mercedes-Benz,Deepal
+73,20261114_101127.jpg,1,832 55 2076 1079,white,Jaguar,0.13,Hongqi,Leapmotor
+74,20261114_101127.jpg,2,1553 1 2184 777,black,Daewoo,0.22,Changan,Leapmotor
+75,20261114_101157.jpg,1,99 1071 1332 2095,grey,Kia,0.20,Jaguar,Leapmotor
+76,20261114_101157.jpg,2,801 959 1432 1772,black,Daewoo,0.31,Changan,Leapmotor
+77,20261114_101312.jpg,1,664 165 2031 1261,grey,Changan,0.21,Geely,BYD
+78,20261114_101416.jpg,1,156 22 2069 1046,black,BYD,0.19,Deepal,BYD
+79,20261114_101503.jpg,1,175 321 2054 1189,white,BYD,0.46,Li Auto,BYD
+80,20261114_155614.jpg,1,57 175 1386 1796,grey,Hyundai,0.38,BYD,BYD
+81,20261114_180146.jpg,1,481 316 2010 1185,white,Chevrolet,0.18,Chery,Chevrolet
+82,20261114_180230.jpg,1,328 181 2086 1160,white,Chevrolet,0.18,Kia,Chevrolet
+83,20261114_191134.jpg,1,189 331 1343 1321,white,Hyundai,0.42,Chevrolet,Hyundai
+84,20261114_191230.jpg,1,20 446 1370 1613,white,Hyundai,0.41,Chevrolet,Hyundai
+85,20261114_191256.jpg,1,75 355 1410 1349,white,Chevrolet,0.60,GAC Aion,Chevrolet
+86,20261114_191403.jpg,1,47 295 1305 1289,white,Lada,0.82,Hyundai,Lada
+87,20261114_191458.jpg,1,3 312 1391 1423,white,Lada,0.83,BYD,Lada
+88,20261114_191528.jpg,1,90 191 1202 1073,white,Chevrolet,0.53,Daewoo,Chevrolet
+89,20261114_191549.jpg,1,114 525 1302 1553,white,Chevrolet,0.59,JAC,Chevrolet
+90,20261114_191606.jpg,1,43 460 1371 1447,white,Chevrolet,0.79,Lada,Chevrolet
+91,20261114_191631.jpg,1,8 495 1336 1573,blue,Chevrolet,0.31,Daewoo,Chevrolet
+92,20261114_191650.jpg,1,130 524 1102 1563,grey,BYD,0.78,Lada,BYD
+93,20261114_191712.jpg,1,1 242 1431 1721,grey,BYD,0.86,Lada,BYD
+94,20261114_191738.jpg,1,1 421 1434 1678,blue,Kia,0.91,Lada,Kia
+95,20261114_191755.jpg,1,49 276 2493 1419,grey,BYD,0.64,Leapmotor,BYD
+96,20261114_191810.jpg,1,137 228 1418 2113,grey,Kia,0.48,Chevrolet,BYD
+97,20261114_191828.jpg,1,275 879 1313 1483,white,Kia,0.33,Chevrolet,other
+98,20261114_191924.jpg,1,73 911 1118 1532,blue,Chevrolet,0.20,Mercedes-Benz,Daewoo
+99,20261114_191945.jpg,1,10 455 1297 1619,black,Chevrolet,0.71,Jetour,Chery
+100,20261116_115438.jpg,1,477 330 2266 1194,black,Leapmotor,0.62,Chery,Leapmotor
+101,20261116_115607.jpg,1,283 84 2359 1150,blue,Dongfeng,0.15,Zeekr,Changan
+102,20261116_115709.jpg,1,1960 350 2559 708,black,Chery,0.16,Chevrolet,Chery
+103,20261116_115709.jpg,2,3 256 848 681,grey,Chery,0.51,Kia,Chery
+104,20261116_115709.jpg,3,755 215 1999 894,black,Chery,0.32,Jetour,Chery
+105,20261116_115823.jpg,1,473 106 2193 1028,white,Chery,0.25,Haval,Chery
+106,20261116_115918.jpg,1,85 186 2327 1325,white,Jetour,0.25,Kia,Jetour
+107,20261116_153147.jpg,1,297 1394 1172 1980,,Daewoo,0.74,Chevrolet,Daewoo

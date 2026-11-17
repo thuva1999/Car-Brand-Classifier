@@ -179,6 +179,17 @@ Comparison with the previous ensemble (`candidate_v3` + `candidate_v2`), both at
 
 Gains on those images: BMW 43→49 of 60, Hyundai 5→9 of 11, Lexus 5→9 of 9, Kia 4→7 of 11, Lada 0→2 of 2 (new class). Changan got worse (28→21 of 101) and stays the weakest brand together with Chery (15 of 55): the two are mostly confused with each other, BYD, Geely and GAC Aion. Per-brand accuracy on the full validation split: Daewoo 100% (9 images), Li Auto 100% (6), Hongqi 96%, Deepal 91%, Jetour 89% (9), BMW 80%, Lexus 79%, Jaguar 76%, Zeekr 75%, Haval 68%, Nissan 67%, Chevrolet 65%, Mercedes-Benz 64%, Lada 60% (5), Leapmotor 59%, JAC 56%, Kia 55%, Hyundai 55%, Geely 54%, Honda 52%, BYD 49%, GAC Aion 41%, Dongfeng 31%, Chery 26%, Changan 25%. Reproduce with `python training\evaluate.py`.
 
+### Brand accuracy on live-test photos
+
+107 cars from the saved live photos (phone photos of a screen, `outputs/live/`) were labelled by hand on 17 Nov with `training/make_brand_labelling_sheets.py` (labels in `outputs/brand_labelling/cars.csv`; same car numbers as the colour labelling). 103 are scored: 3 could not be identified and 1 is a brand the model does not have.
+
+| Ensemble (60% DINOv2 / 40% MobileNet) | Correct | Accuracy |
+|---|---|---|
+| **candidate_v5 + candidate_v6 (active)** | 60/103 | **58%** |
+| candidate_v3 + candidate_v2 (previous) | 53/103 | 51% |
+
+The right brand is among the top three guesses for 73 of 103. Either model alone gets 47, so the ensemble is worth keeping; DINOv2 shares from 40% to 70% score 58–61, too close to separate on 103 cars, so 60% stays. Per brand: Chevrolet 19/21, BYD 15/19, Chery 4/6, Daewoo 4/6, Dongfeng 5/8, Leapmotor 3/8, Zeekr 2/5, Hyundai 2/5, Lada 2/3, Kia 2/2, and none right for Geely (0/6), GAC Aion (0/5), Deepal (0/4) and Changan (0/3), although Deepal scores 91% and Geely 54% on listing-photo validation: the gap is between dealer photos and a phone pointed at a screen. Many of the 103 are repeat shots of the same car, so the numbers are rough, and these cars are kept out of training.
+
 ### Earlier brand results (candidate_v3 + candidate_v2, 24 brands)
 
 `candidate_v2` (MobileNetV3-Small, 40 epochs) and `candidate_v3` (frozen DINOv2 ViT-S/14 + linear head) were both trained on `data/split_dataset_candidate_v2` (3,937 train / 1,057 validation). DINOv2 is not fine-tuned: `train_brand_dinov2.py` extracts its features once (clean crop, mirror, one augmented copy; cached in `outputs/`) and trains only the head, because fine-tuning a ViT on a laptop CPU takes hours. The two models make different mistakes, so averaging their probabilities beats both:
