@@ -16,6 +16,7 @@ from PIL import Image
 
 from config import (
     DETECT_CONFIDENCE,
+    DETECT_NMS_IOU,
     MIN_BOX_RELATIVE_AREA,
     MIN_AREA_VS_LARGEST,
     MIN_BOX_SIDE_PX,
@@ -91,6 +92,7 @@ def detect_cars(image: Image.Image, detector) -> list[dict]:
         # and it missed or under-scored cars.
         source=image.convert("RGB"),
         conf=DETECT_CONFIDENCE,
+        iou=DETECT_NMS_IOU,
         classes=VEHICLE_CLASS_IDS,
         # One vehicle is often boxed as both "car" and "truck"; merge across
         # classes so it is reported once, not twice.

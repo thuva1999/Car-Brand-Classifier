@@ -69,7 +69,13 @@ VEHICLE_CLASS_IDS = [2, 7]
 
 # Tuned to prefer missing a dubious car over inventing one.
 # Extra leftover predictions cost 1 live-test point each.
-DETECT_CONFIDENCE = 0.35
+# 0.35 dropped a Hyundai Palisade half hidden behind a Mercedes (0.349) and
+# a Kia rear view seen through tree glare (0.31). On all 104 live photos
+# (17 Nov), 0.25 with NMS IoU 0.5 adds only those two and nothing wrong;
+# 0.20 added web-page boxes and duplicates. IoU 0.5 (YOLO default 0.7)
+# merges the two overlapping boxes YOLO puts on a partly hidden car.
+DETECT_CONFIDENCE = 0.25
+DETECT_NMS_IOU = 0.5
 MIN_BOX_RELATIVE_AREA = 0.008
 MIN_BOX_SIDE_PX = 40
 # Drop boxes smaller than this share of the biggest car in the photo: on the

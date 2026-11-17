@@ -220,7 +220,7 @@ Per-brand accuracy on the full validation split: Hongqi 100%, GAC Aion 92%, Li A
 
 The training and inference brand pipelines share their resize, RGB tensor conversion, and ImageNet normalization. Class order is stored in each checkpoint and loaded from that checkpoint. Validation images are scored by normalized class name, not by assuming the folder indices match the model's output indices.
 
-The street-photo dry run is not an accuracy measurement: `data/tashkent_test` currently has no per-car ground-truth labels. For domain-matched training, run `crop_street_photos.py`, manually identify every crop, then put labelled crops into `data/brand_dataset/<Brand>/`. Never train on unlabelled crops. Report the source of every imported dataset. The brand unknown threshold is 0.00, so a brand is always guessed. Detector confidence remains at 0.35 because the test set has no box annotations to verify whether lowering it adds true cars or false/duplicate detections.
+The street-photo dry run is not an accuracy measurement: `data/tashkent_test` currently has no per-car ground-truth labels. For domain-matched training, run `crop_street_photos.py`, manually identify every crop, then put labelled crops into `data/brand_dataset/<Brand>/`. Never train on unlabelled crops. Report the source of every imported dataset. The brand unknown threshold is 0.00, so a brand is always guessed. Detector confidence is 0.25 with NMS IoU 0.5 (lowered from 0.35 / 0.7 on 17 Nov): on all 104 live photos this adds only two missed real cars, a Hyundai Palisade half hidden behind a Mercedes and a Kia seen through tree glare, and no false or duplicate boxes; 0.20 added web-page boxes and duplicates.
 
 ## Colour labels and HSV method
 
