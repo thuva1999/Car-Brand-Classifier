@@ -8,13 +8,16 @@ internet), then open the address printed below in the phone's browser.
     python serve.py              # port 8000
     python serve.py --port 8080
 
-Every photo and its annotated result are saved under outputs/live/.
+Every photo and its annotated result are saved under outputs/live/. Under each
+answer the page lets you confirm or correct the brand and colour of every car;
+that goes to outputs/live/feedback.csv, which gives a running live accuracy.
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import csv
 import io
 import socket
 import sys
@@ -38,6 +41,13 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 40 * 1024 * 1024
 pipeline: CarPipeline | None = None
 pipeline_lock = threading.Lock()  # one photo at a time
+FEEDBACK_CSV = OUTPUT_DIR / "feedback.csv"
+FEEDBACK_FIELDS = ["photo", "car_in_photo", "box", "predicted_brand", "brand_confidence",
+                   "true_brand", "predicted_colour", "colour_confidence", "true_colour"]
+COLOURS = ["white", "black", "grey", "red", "blue", "green", "brown", "yellow"]
+NOT_SCORED = ("unknown", "other")  # can't tell / not one of the model's classes
+recent: dict[str, list[dict]] = {}  # stamp -> predictions, until the phone sends feedback
+feedback_lock = threading.Lock()
 
 PAGE = """<!doctype html>
 <html lang="en"><head>
@@ -65,12 +75,23 @@ PAGE = """<!doctype html>
   .meta { color:var(--muted); font-size:14px; }
   img { width:100%; border-radius:8px; margin-top:12px; }
   .error { color:#d1242f; }
+  .fb { margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
+  .fbrow { display:flex; gap:8px; align-items:center; margin:8px 0; }
+  .fbrow span { width:20px; font-weight:700; }
+  select { flex:1; min-width:0; padding:10px 6px; font-size:16px; border-radius:8px;
+           border:1px solid var(--border); background:var(--card); color:var(--text); }
+  select.changed { border-color:#d1242f; border-width:2px; }
+  button { width:100%; padding:14px; margin-top:8px; border:0; border-radius:10px; background:#1a7f37;
+           color:#fff; font-size:18px; font-weight:600; }
+  button:disabled { opacity:.6; }
+  #tally { margin-top:16px; text-align:center; }
 </style></head>
 <body><main>
   <h1>Car brand &amp; colour</h1>
   <label class="take">Take photo<input id="camera" type="file" accept="image/*" capture="environment"></label>
   <label class="alt">or choose from gallery<input id="gallery" type="file" accept="image/*"></label>
   <div id="out"></div>
+  <div id="tally" class="meta"></div>
 </main>
 <script>
 const out = document.getElementById('out');
@@ -93,11 +114,61 @@ async function send(file) {
         ${rows ? '<ol>' + rows + '</ol>' : ''}
         <div class="meta">${data.cars.length} car(s) · model ${data.seconds}s · total ${((Date.now()-started)/1000).toFixed(1)}s</div>
         <img src="data:image/jpeg;base64,${data.annotated}" alt="Photo with detected cars boxed">
+        ${feedbackForm(data)}
       </div>`;
+    wireFeedback(data);
   } catch (error) {
     out.innerHTML = `<div class="card error">Failed: ${esc(error.message)}</div>`;
   }
 }
+function options(list, chosen) {
+  return list.map(v => `<option${v === chosen ? ' selected' : ''}>${esc(v)}</option>`).join('');
+}
+function feedbackForm(data) {
+  const rows = data.cars.map((c, i) => `<div class="fbrow"><span>${i + 1}</span>
+      <select data-kind="brand" data-car="${i}" data-predicted="${esc(c.brand)}">${options(data.brands, c.brand)}</select>
+      <select data-kind="colour" data-car="${i}" data-predicted="${esc(c.colour)}">${options(data.colours, c.colour)}</select>
+    </div>`).join('');
+  return `<div class="fb"><div class="meta">Is it right? Leave correct answers as they are, change the wrong ones
+      to the true brand / colour ("unknown" = can't tell, "other" = brand not in the list), then save.</div>
+    ${rows}<button id="save">All correct: save</button><div id="saved" class="meta"></div></div>`;
+}
+function showTally(t) {
+  if (!t || !t.cars) { document.getElementById('tally').textContent = ''; return; }
+  const pct = (a, b) => b ? ` (${Math.round(100 * a / b)}%)` : '';
+  document.getElementById('tally').textContent =
+    `Checked so far: brand ${t.brand_right}/${t.brand_total}${pct(t.brand_right, t.brand_total)}` +
+    ` · colour ${t.colour_right}/${t.colour_total}${pct(t.colour_right, t.colour_total)}`;
+}
+function wireFeedback(data) {
+  const button = document.getElementById('save');
+  const selects = [...out.querySelectorAll('select')];
+  const refresh = () => {
+    let wrong = 0;
+    for (const s of selects) { const c = s.value !== s.dataset.predicted; s.classList.toggle('changed', c); wrong += c; }
+    button.textContent = wrong ? `Save (${wrong} corrected)` : 'All correct: save';
+    button.disabled = false;
+  };
+  selects.forEach(s => s.addEventListener('change', refresh));
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    const cars = data.cars.map(() => ({}));
+    for (const s of selects) cars[s.dataset.car]['true_' + s.dataset.kind] = s.value;
+    try {
+      const response = await fetch('/feedback', {method:'POST', headers:{'Content-Type':'application/json'},
+                                                 body: JSON.stringify({stamp: data.stamp, cars})});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || response.statusText);
+      document.getElementById('saved').textContent = 'Saved. You can still change an answer and save again.';
+      button.textContent = 'Saved \u2713';
+      showTally(result.tally);
+    } catch (error) {
+      document.getElementById('saved').innerHTML = `<span class="error">Not saved: ${esc(error.message)}</span>`;
+      button.disabled = false;
+    }
+  });
+}
+fetch('/tally').then(r => r.json()).then(showTally).catch(() => {});
 for (const id of ['camera', 'gallery']) {
   const input = document.getElementById(id);
   input.addEventListener('change', () => { send(input.files[0]); input.value = ''; });
@@ -138,11 +209,18 @@ def predict():
         print(f"  Car {number}: {item['brand']} ({item['brand_confidence']:.0%})"
               f" — {item['colour']} ({item['colour_confidence']:.0%})")
 
+    recent[stamp] = predictions
+    while len(recent) > 50:
+        recent.pop(next(iter(recent)))
+
     preview = annotated.copy()
     preview.thumbnail((1280, 1280))
     buffer = io.BytesIO()
     preview.save(buffer, format="JPEG", quality=80)
     return jsonify(
+        stamp=stamp,
+        brands=sorted(pipeline.brand_names) + list(NOT_SCORED),
+        colours=COLOURS + ["unknown"],
         answer=answer,
         seconds=round(seconds, 1),
         annotated=base64.b64encode(buffer.getvalue()).decode("ascii"),
@@ -157,6 +235,72 @@ def predict():
             for item in predictions
         ],
     )
+
+
+def read_feedback() -> list[dict]:
+    if not FEEDBACK_CSV.exists():
+        return []
+    with open(FEEDBACK_CSV, newline="", encoding="utf-8") as file:
+        return list(csv.DictReader(file))
+
+
+def tally(rows: list[dict]) -> dict:
+    """Right / scored counts; "unknown" and "other" answers are not scored."""
+
+    def count(kind: str) -> tuple[int, int]:
+        scored = [row for row in rows if row[f"true_{kind}"] not in NOT_SCORED]
+        return sum(row[f"true_{kind}"] == row[f"predicted_{kind}"] for row in scored), len(scored)
+
+    brand_right, brand_total = count("brand")
+    colour_right, colour_total = count("colour")
+    return dict(cars=len(rows), brand_right=brand_right, brand_total=brand_total,
+                colour_right=colour_right, colour_total=colour_total)
+
+
+@app.get("/tally")
+def get_tally():
+    return jsonify(tally(read_feedback()))
+
+
+@app.post("/feedback")
+def feedback():
+    data = request.get_json(silent=True) or {}
+    stamp = str(data.get("stamp", ""))
+    predictions = recent.get(stamp)
+    answers = data.get("cars")
+    if predictions is None:
+        return jsonify(error="That photo is no longer in memory (server restarted?)."), 400
+    if not isinstance(answers, list) or len(answers) != len(predictions):
+        return jsonify(error="Feedback does not match the cars in that photo."), 400
+    brands = set(pipeline.brand_names) | set(NOT_SCORED)
+    colours = set(COLOURS) | {"unknown"}
+    new_rows = []
+    for number, (item, given) in enumerate(zip(predictions, answers), start=1):
+        given = given if isinstance(given, dict) else {}
+        true_brand, true_colour = str(given.get("true_brand")), str(given.get("true_colour"))
+        if true_brand not in brands or true_colour not in colours:
+            return jsonify(error=f"Unknown brand or colour for car {number}."), 400
+        new_rows.append({
+            "photo": f"{stamp}.jpg", "car_in_photo": number,
+            "box": " ".join(str(int(value)) for value in item["box"]),
+            "predicted_brand": item["brand"], "brand_confidence": f"{item['brand_confidence']:.2f}",
+            "true_brand": true_brand,
+            "predicted_colour": item["colour"], "colour_confidence": f"{item['colour_confidence']:.2f}",
+            "true_colour": true_colour,
+        })
+    with feedback_lock:
+        # Saving the same photo again replaces its earlier rows.
+        rows = [row for row in read_feedback() if row["photo"] != f"{stamp}.jpg"] + new_rows
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        with open(FEEDBACK_CSV, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=FEEDBACK_FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+    wrong = [f"car {row['car_in_photo']}: {kind} {row[f'predicted_{kind}']} -> {row[f'true_{kind}']}"
+             for row in new_rows for kind in ("brand", "colour")
+             if row[f"true_{kind}"] != row[f"predicted_{kind}"]]
+    print(f"  feedback [{stamp}]: " + ("; ".join(wrong) if wrong else "all correct"))
+    return jsonify(saved=len(new_rows), tally=tally(rows))
 
 
 def local_addresses() -> list[str]:
