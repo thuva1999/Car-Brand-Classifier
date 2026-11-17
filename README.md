@@ -103,12 +103,11 @@ Weights:
 - `models/car_brand_classifier_candidate_v6.pth` — **brand model, part 2**: MobileNetV3-Small (25 brands), trained on `data/split_dataset_candidate_v6`
 - `models/car_brand_classifier_candidate_v3.pth`, `models/car_brand_classifier_candidate_v2.pth` — previous ensemble (24 brands, trained on `data/split_dataset_candidate_v2`), kept for comparison
 - `models/dinov2_vits14_224.pth` — pretrained DINOv2 weights, needed only to train a new DINOv2 head
-- `models/car_brand_classifier_candidate_v1.pth` — previous MobileNet model (22 brands), kept for comparison
 - `models/yolo11n-seg.pt` — detector with car outlines, required on test day
 - `models/color_names.json` — the eight colour labels
 - `models/car_color_classifier.pth` — not trained yet; HSV is used without it
 
-Earlier experiment checkpoints (the old v1–v5, `fixed`, `v4_reduced`, the YOLOv8n detector) were removed or replaced; tracked ones remain in git history. The numbering restarted at `candidate_v1` after the dataset was re-cleaned.
+Earlier experiment checkpoints (the old v1–v5, `fixed`, `v4_reduced`, the YOLOv8n detector, and later `candidate_v1` and `candidate_v4_reduced`) were removed or replaced; tracked ones remain in git history. The numbering restarted at `candidate_v1` after the dataset was re-cleaned.
 
 ## Data
 
