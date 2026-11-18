@@ -101,8 +101,6 @@ Weights:
 
 - `models/car_brand_classifier_candidate_v1_dinov2.pth` — **brand model, part 1**: DINOv2 ViT-S/14 + linear head (25 brands), trained on `data/split_dataset_candidate_v7` by `training/train_brand_dinov2.py`
 - `models/car_brand_classifier_candidate_v1_mobilenet.pth` — **brand model, part 2**: MobileNetV3-Small (25 brands), trained on `data/split_dataset_candidate_v7`
-- `models/car_brand_classifier_candidate_v5.pth`, `models/car_brand_classifier_candidate_v6.pth` — previous ensemble (25 brands, trained on `data/split_dataset_candidate_v6`), kept as a fallback
-- `models/car_brand_classifier_candidate_v3.pth`, `models/car_brand_classifier_candidate_v2.pth` — previous ensemble (24 brands, trained on `data/split_dataset_candidate_v2`), kept for comparison
 - `models/dinov2_vits14_224.pth` — pretrained DINOv2 weights, needed only to train a new DINOv2 head
 - `models/yolo11n-seg.pt` — detector with car outlines, required on test day
 - `models/color_names.json` — the eight colour labels
@@ -156,7 +154,7 @@ python training\evaluate.py
 
 `train_brand_classifier.py` pads each crop to a square instead of stretching it, uses AdamW with warmup and cosine decay, label smoothing 0.1, oversampling of small brands capped at 3x, and keeps the checkpoint with the best *balanced* (per-brand average) validation accuracy. `--arch mobilenet_v3_large` or `--arch efficientnet_b0` and `--image-size` select a bigger backbone or input. Each checkpoint stores its architecture, image size and preprocessing, so older stretched-input checkpoints still load correctly. Inference and `evaluate.py` average predictions over the crop and its mirror image.
 
-`split_dataset.py` skips a brand with fewer than 8 images or listed in `EXCLUDED_BRANDS`, and writes the split configured as `SPLIT_BRAND_DIR` (currently `data/split_dataset_candidate_v6/`); it never deletes an existing split. `train_brand_classifier.py` writes the next model to `BRAND_CANDIDATE_MODEL_PATH`, keeping the active model unchanged. `python training\evaluate.py` evaluates the active model on that split and prints validation accuracy, per-brand accuracy, a confusion matrix (also saved under `outputs/`), and a dry run on `data/tashkent_test`.
+`split_dataset.py` skips a brand with fewer than 8 images or listed in `EXCLUDED_BRANDS`, and writes the split configured as `SPLIT_BRAND_DIR` (currently `data/split_dataset_candidate_v7/`); it never deletes an existing split. `train_brand_classifier.py` writes the next model to `BRAND_CANDIDATE_MODEL_PATH`, keeping the active model unchanged. `python training\evaluate.py` evaluates the active model on that split and prints validation accuracy, per-brand accuracy, a confusion matrix (also saved under `outputs/`), and a dry run on `data/tashkent_test`.
 
 `training/remove_brands.py` copies a trained checkpoint and removes the output rows of the given brands, so the copy can only choose among the remaining ones. It does not retrain.
 
