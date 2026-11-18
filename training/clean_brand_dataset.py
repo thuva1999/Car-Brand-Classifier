@@ -14,7 +14,8 @@ For each image:
   * skip byte-identical duplicates (they would leak between train and val).
 
 The original data/brand_dataset is never modified. Re-running skips images
-that were already processed.
+that were already processed: kept ones by their crop, rejected ones by
+data/brand_dataset_clean/rejected.txt (so the review folder can be deleted).
 
     python training/clean_brand_dataset.py
     python training/clean_brand_dataset.py --min-area 0.2 --brands BYD Chery
@@ -99,6 +100,16 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     report_path = args.output / "clean_report.csv"
 
+    # Every rejection is also recorded here, so deleting the review folder (or
+    # removing a crop by hand) does not let a rejected image back in on re-runs.
+    # Delete a line to have that image judged again.
+    rejected_list_path = args.output / "rejected.txt"
+    rejected_list = set()
+    if rejected_list_path.exists():
+        rejected_list = {
+            line.strip() for line in rejected_list_path.read_text(encoding="utf-8").splitlines() if line.strip()
+        }
+
     seen_hashes: dict[str, Path] = {}
     rows = []
     totals = {"kept": 0, "rejected": 0, "duplicate": 0, "unreadable": 0}
@@ -124,11 +135,12 @@ def main() -> None:
 
             out_path = args.output / folder.name / (image_path.stem + ".jpg")
             rejected_path = args.rejected / folder.name / image_path.name
+            record_key = f"{folder.name}/{image_path.relative_to(folder).as_posix()}"
             if out_path.exists():
                 kept += 1
                 totals["kept"] += 1
                 continue
-            if rejected_path.exists():
+            if rejected_path.exists() or record_key in rejected_list:
                 rejected += 1
                 totals["rejected"] += 1
                 continue
@@ -160,6 +172,7 @@ def main() -> None:
             else:
                 rejected_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(image_path, rejected_path)
+                rejected_list.add(record_key)
                 rejected += 1
                 totals["rejected"] += 1
                 reason = "no vehicle" if not found else "vehicle too small"
@@ -171,6 +184,8 @@ def main() -> None:
         writer = csv.writer(file)
         writer.writerow(["brand", "file", "status", "box_fraction", "note"])
         writer.writerows(rows)
+
+    rejected_list_path.write_text("".join(f"{key}\n" for key in sorted(rejected_list)), encoding="utf-8")
 
     print("\nTotals:", totals)
     print("Clean crops:", args.output)

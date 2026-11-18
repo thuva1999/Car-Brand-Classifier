@@ -12,7 +12,7 @@ BRAND_DATASET_DIR = DATA_DIR / "brand_dataset"
 BRAND_CLEAN_DATASET_DIR = DATA_DIR / "brand_dataset_clean"
 BRAND_REJECTED_DIR = DATA_DIR / "brand_dataset_review" / "rejected_by_yolo"
 COLOR_DATASET_DIR = DATA_DIR / "color_dataset"
-SPLIT_BRAND_CANDIDATE_DIR = DATA_DIR / "split_dataset_candidate_v6"
+SPLIT_BRAND_CANDIDATE_DIR = DATA_DIR / "split_dataset_candidate_v7"
 SPLIT_BRAND_DIR = SPLIT_BRAND_CANDIDATE_DIR
 SPLIT_COLOR_CANDIDATE_DIR = DATA_DIR / "split_color_candidate"
 SPLIT_COLOR_DIR = SPLIT_COLOR_CANDIDATE_DIR
@@ -23,16 +23,21 @@ STREET_PHOTO_DIRS = [
 ]
 LABELS_CSV = DATA_DIR / "labels" / "cars.csv"
 
-# Active brand model (retrained 16 Nov, 25 brands, adds Lada): ensemble of
-# candidate_v5 (frozen DINOv2 ViT-S/14 + linear head,
-# training/train_brand_dinov2.py) and candidate_v6 (MobileNetV3-Small), both
-# trained on split_dataset_candidate_v6 (4,335 train / 1,141 val). Both run on
-# every car; brand probabilities are averaged 60% DINOv2 / 40% MobileNet.
-# On the v6 val: v5 alone 47.0% (balanced 59.2%), v6 alone 53.5% (57.4%),
-# ensemble 0.5/0.5 56.7%.
-# Against the previous ensemble (candidate_v3 + candidate_v2), on the 400 v6
-# val images that were not in the old training split:
-#   new 52.2% (balanced 70.9%)  vs  old 47.5% (balanced 54.7%).
+# Active brand model (retrained 17 Nov, 25 brands): ensemble of
+# candidate_v1_dinov2 (frozen DINOv2 ViT-S/14 + linear head,
+# training/train_brand_dinov2.py) and candidate_v1_mobilenet
+# (MobileNetV3-Small), both trained on split_dataset_candidate_v7
+# (4,308 train / 1,128 val; adds Tashkent-market Geely, GAC Aion, Kia,
+# Hyundai and Changan listings, close-up crops removed). Both run on every
+# car; brand probabilities are averaged 60% DINOv2 / 40% MobileNet.
+# On the v7 val: DINOv2 alone 47.9% (balanced 58.8%), MobileNet alone
+# best balanced 51.3%.
+# Against the previous ensemble (candidate_v5 + candidate_v6) on live phone
+# photos of a screen (never trained on):
+#   103 hand-labelled cars (17 Nov):  new 62/103 (60%)  vs  old 60/103 (58%)
+#   58 phone-feedback cars:           new 24/58 (41%)   vs  old 18/58 (31%)
+# Gains: Geely 0/14 -> 4/14, GAC Aion 0/13 -> 4/13, Kia 5/17 -> 9/17.
+# Losses: Chevrolet 20/22 -> 16/22, Dongfeng 8/11 -> 5/11.
 # DINOv2 is weighted higher because it holds up better on phone photos of a
 # screen (the live test): with the previous models, on 7 hand-checked live
 # cars DINOv2 alone was right on Leapmotor, Jetour and a Chery sedan where
@@ -40,8 +45,8 @@ LABELS_CSV = DATA_DIR / "labels" / "cars.csv"
 # A list of checkpoints runs as an ensemble with BRAND_ENSEMBLE_WEIGHTS (same
 # order); a single path runs that model alone.
 BRAND_MODEL_PATH = [
-    MODELS_DIR / "car_brand_classifier_candidate_v5.pth",
-    MODELS_DIR / "car_brand_classifier_candidate_v6.pth",
+    MODELS_DIR / "car_brand_classifier_candidate_v1_dinov2.pth",
+    MODELS_DIR / "car_brand_classifier_candidate_v1_mobilenet.pth",
 ]
 BRAND_ENSEMBLE_WEIGHTS = [0.6, 0.4]
 # Where the next training run saves (kept separate from the active model).

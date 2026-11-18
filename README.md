@@ -5,7 +5,7 @@ CSAI-3210 midterm pipeline. A phone photo of a Tashkent street goes in. The lapt
 Architecture:
 
 1. **YOLO11n-seg** pretrained on COCO finds cars and trucks and outlines each one (detector only). Overlapping "car" and "truck" boxes for the same vehicle are merged. If `models/yolo11n-seg.pt` is missing, the first run downloads it (needs internet).
-2. Each crop goes through a **brand ensemble** of two models, **25 brands**: a frozen **DINOv2 ViT-S/14** with a trained linear head (`models/car_brand_classifier_candidate_v5.pth`) and **MobileNetV3-Small** fine-tuned on our brand folders (`models/car_brand_classifier_candidate_v6.pth`). Their brand probabilities are averaged 60% DINOv2 / 40% MobileNet.
+2. Each crop goes through a **brand ensemble** of two models, **25 brands**: a frozen **DINOv2 ViT-S/14** with a trained linear head (`models/car_brand_classifier_candidate_v1_dinov2.pth`) and **MobileNetV3-Small** fine-tuned on our brand folders (`models/car_brand_classifier_candidate_v1_mobilenet.pth`). Their brand probabilities are averaged 60% DINOv2 / 40% MobileNet.
 3. Colour uses **HSV rules** on the car's own pixels (its segmentation outline, door/bonnet band). No colour model has been trained yet: `data/color_dataset` is empty. The code would use a trained colour model only if `models/car_color_classifier.pth` existed and was at least 0.70 confident.
 4. Small or low-confidence boxes are dropped. Every prediction prints its brand, colour and detection confidence.
 
@@ -19,7 +19,7 @@ venv\Scripts\activate
 python infer.py path\to\photo.jpg
 ```
 
-The default brand model is the DINOv2 + MobileNet ensemble (`candidate_v5` + `candidate_v6`, 25 brands), set by `BRAND_MODEL_PATH` and `BRAND_ENSEMBLE_WEIGHTS` in `src/config.py`. Set `BRAND_MODEL_PATH` to a single checkpoint to run that model alone.
+The default brand model is the DINOv2 + MobileNet ensemble (`candidate_v1_dinov2` + `candidate_v1_mobilenet`, 25 brands), set by `BRAND_MODEL_PATH` and `BRAND_ENSEMBLE_WEIGHTS` in `src/config.py`. Set `BRAND_MODEL_PATH` to a single checkpoint to run that model alone.
 
 Example output (`data\tashkent_test\IMG_20261023_164620.jpg`):
 
@@ -35,8 +35,8 @@ Brand % is the model's softmax probability. Colour % says how clearly the HSV ru
 To select a specific brand checkpoint, or several to run as an equal-weight ensemble:
 
 ```bat
-python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v6.pth
-python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v5.pth models\car_brand_classifier_candidate_v6.pth
+python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v1_mobilenet.pth
+python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v1_dinov2.pth models\car_brand_classifier_candidate_v1_mobilenet.pth
 ```
 
 For a single image that is already cropped to one car, skip YOLO explicitly:
@@ -99,8 +99,9 @@ python infer.py data\tashkent_test\IMG_20261023_164608.jpg
 
 Weights:
 
-- `models/car_brand_classifier_candidate_v5.pth` — **brand model, part 1**: DINOv2 ViT-S/14 + linear head (25 brands), trained on `data/split_dataset_candidate_v6` by `training/train_brand_dinov2.py`
-- `models/car_brand_classifier_candidate_v6.pth` — **brand model, part 2**: MobileNetV3-Small (25 brands), trained on `data/split_dataset_candidate_v6`
+- `models/car_brand_classifier_candidate_v1_dinov2.pth` — **brand model, part 1**: DINOv2 ViT-S/14 + linear head (25 brands), trained on `data/split_dataset_candidate_v7` by `training/train_brand_dinov2.py`
+- `models/car_brand_classifier_candidate_v1_mobilenet.pth` — **brand model, part 2**: MobileNetV3-Small (25 brands), trained on `data/split_dataset_candidate_v7`
+- `models/car_brand_classifier_candidate_v5.pth`, `models/car_brand_classifier_candidate_v6.pth` — previous ensemble (25 brands, trained on `data/split_dataset_candidate_v6`), kept as a fallback
 - `models/car_brand_classifier_candidate_v3.pth`, `models/car_brand_classifier_candidate_v2.pth` — previous ensemble (24 brands, trained on `data/split_dataset_candidate_v2`), kept for comparison
 - `models/dinov2_vits14_224.pth` — pretrained DINOv2 weights, needed only to train a new DINOv2 head
 - `models/yolo11n-seg.pt` — detector with car outlines, required on test day
@@ -159,7 +160,20 @@ python training\evaluate.py
 
 `training/remove_brands.py` copies a trained checkpoint and removes the output rows of the given brands, so the copy can only choose among the remaining ones. It does not retrain.
 
-### Brand results (active: DINOv2 + MobileNet ensemble, 25 brands)
+### Brand results (active: candidate_v1_dinov2 + candidate_v1_mobilenet, 25 brands)
+
+Retrained on 17 Nov after the live-photo test showed Geely and GAC Aion at 0%: the training photos were mostly China-only models, not the ones sold in Tashkent. Added OLX Tashkent listing photos of Geely (Monjaro, Geometry, EX5), GAC (GS8, Aion V), Kia (Sportage, K5, Sonet, Sorento), Hyundai (Tucson, Elantra, Sonata, Santa Fe) and Changan (sedans, SUVs, Benben, UNIK), removed 228 close-up crops (wheels, mirrors, badges) from the clean folder, and trained both models on `data/split_dataset_candidate_v7` (4,308 train / 1,128 validation). On that validation split: DINOv2 alone 47.9% (balanced 58.8%), MobileNet alone best balanced 51.3%.
+
+Scored on live phone photos of a screen, which neither ensemble trained on (60% DINOv2 / 40% MobileNet):
+
+| Ensemble | 103 labelled live cars | 58 phone-feedback cars |
+|---|---|---|
+| **candidate_v1_dinov2 + candidate_v1_mobilenet (active)** | **62/103 = 60%** | **24/58 = 41%** |
+| candidate_v5 + candidate_v6 (previous) | 60/103 = 58% | 18/58 = 31% |
+
+Both sets together: Geely 0/14 → 4/14, GAC Aion 0/13 → 4/13, Kia 5/17 → 9/17, BMW 5/7 → 6/7, Mercedes-Benz 2/6 → 3/6; worse on Chevrolet 20/22 → 16/22 and Dongfeng 8/11 → 5/11; Changan still 0/3, Deepal 0/4. The feedback cars are marked in the live page (`outputs/live/feedback.csv`) and, like the 103, are kept out of training.
+
+### Previous brand results (candidate_v5 + candidate_v6, 25 brands)
 
 Retrained on 16 Nov after adding Daewoo, Jetour, Lada, Leapmotor, Changan and Chery photos and re-cleaning the dataset. `candidate_v5` (frozen DINOv2 ViT-S/14 + linear head) and `candidate_v6` (MobileNetV3-Small, 40 epochs) were both trained on `data/split_dataset_candidate_v6` (4,335 train / 1,141 validation, 25 brands including Lada).
 
@@ -173,7 +187,7 @@ Comparison with the previous ensemble (`candidate_v3` + `candidate_v2`), both at
 
 | Ensemble | Accuracy | Balanced accuracy |
 |---|---|---|
-| **candidate_v5 + candidate_v6 (active)** | **209/400 = 52.2%** | **70.9%** |
+| **candidate_v5 + candidate_v6** | **209/400 = 52.2%** | **70.9%** |
 | candidate_v3 + candidate_v2 (previous) | 190/400 = 47.5% | 54.7% |
 
 Gains on those images: BMW 43→49 of 60, Hyundai 5→9 of 11, Lexus 5→9 of 9, Kia 4→7 of 11, Lada 0→2 of 2 (new class). Changan got worse (28→21 of 101) and stays the weakest brand together with Chery (15 of 55): the two are mostly confused with each other, BYD, Geely and GAC Aion. Per-brand accuracy on the full validation split: Daewoo 100% (9 images), Li Auto 100% (6), Hongqi 96%, Deepal 91%, Jetour 89% (9), BMW 80%, Lexus 79%, Jaguar 76%, Zeekr 75%, Haval 68%, Nissan 67%, Chevrolet 65%, Mercedes-Benz 64%, Lada 60% (5), Leapmotor 59%, JAC 56%, Kia 55%, Hyundai 55%, Geely 54%, Honda 52%, BYD 49%, GAC Aion 41%, Dongfeng 31%, Chery 26%, Changan 25%. Reproduce with `python training\evaluate.py`.
@@ -184,7 +198,7 @@ Gains on those images: BMW 43→49 of 60, Hyundai 5→9 of 11, Lexus 5→9 of 9,
 
 | Ensemble (60% DINOv2 / 40% MobileNet) | Correct | Accuracy |
 |---|---|---|
-| **candidate_v5 + candidate_v6 (active)** | 60/103 | **58%** |
+| **candidate_v5 + candidate_v6** | 60/103 | **58%** |
 | candidate_v3 + candidate_v2 (previous) | 53/103 | 51% |
 
 The right brand is among the top three guesses for 73 of 103. Either model alone gets 47, so the ensemble is worth keeping; DINOv2 shares from 40% to 70% score 58–61, too close to separate on 103 cars, so 60% stays. Per brand: Chevrolet 19/21, BYD 15/19, Chery 4/6, Daewoo 4/6, Dongfeng 5/8, Leapmotor 3/8, Zeekr 2/5, Hyundai 2/5, Lada 2/3, Kia 2/2, and none right for Geely (0/6), GAC Aion (0/5), Deepal (0/4) and Changan (0/3), although Deepal scores 91% and Geely 54% on listing-photo validation: the gap is between dealer photos and a phone pointed at a screen. Many of the 103 are repeat shots of the same car, so the numbers are rough, and these cars are kept out of training.

@@ -64,9 +64,9 @@ number,photo,car_in_photo,box,true_colour,predicted_brand,brand_confidence,secon
 63,20261114_100317.jpg,1,262 182 2169 1279,white,BMW,0.17,Chery,Geely
 64,20261114_100344.jpg,1,325 136 2088 1161,white,BMW,0.18,Hongqi,Geely
 65,20261114_100430.jpg,1,683 88 1338 577,grey,GAC Aion,0.60,Chery,Geely
-66,20261114_100603.jpg,1,583 332 1692 1286,white,Changan,0.18,Dongfeng,Geely
-67,20261114_100628.jpg,1,457 184 2230 1414,white,Leapmotor,0.15,Jetour,Geely
-68,20261114_100659.jpg,1,324 190 1881 1201,white,Kia,0.18,Dongfeng,Geely
+66,20261114_100603.jpg,1,583 332 1692 1286,white,Changan,0.18,Dongfeng,GAC Aion
+67,20261114_100628.jpg,1,457 184 2230 1414,white,Leapmotor,0.15,Jetour,GAC Aion
+68,20261114_100659.jpg,1,324 190 1881 1201,white,Kia,0.18,Dongfeng,GAC Aion
 69,20261114_100759.jpg,1,36 269 2341 1292,white,BYD,0.24,Geely,Deepal
 70,20261114_100916.jpg,1,424 394 1572 1115,black,BYD,0.20,Hyundai,Deepal
 71,20261114_100935.jpg,1,767 294 1644 843,blue,Kia,0.14,Dongfeng,Deepal
