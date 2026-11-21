@@ -21,7 +21,6 @@ STREET_PHOTO_DIRS = [
     DATA_DIR / "raw" / "Tashkent" / "images",
     DATA_DIR / "raw" / "Tashkent",
 ]
-LABELS_CSV = DATA_DIR / "labels" / "cars.csv"
 
 # Active brand model (retrained 17 Nov, 25 brands): ensemble of
 # candidate_v1_dinov2 (frozen DINOv2 ViT-S/14 + linear head,
