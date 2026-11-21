@@ -1,6 +1,6 @@
 # Tashkent car brand and colour classifier
 
-CSAI-3210 midterm pipeline. A phone photo of a Tashkent street goes in. The laptop, **offline**, prints one `(brand, colour)` pair per classifiable car.
+CSAI-3210 midterm pipeline. A phone photo of a Tashkent street goes in. The laptop, **offline**, returns one `(brand, colour)` pair per classifiable car to the phone page.
 
 Architecture:
 
@@ -11,53 +11,13 @@ Architecture:
 
 ## Live test
 
-No internet. One photo, under two minutes.
+The live test uses the phone page served by `serve.py` **from the laptop**. The laptop and the phone are on the same network. The phone only takes the photo and shows the answer; YOLO, the brand model and the colour rules all run on the laptop. No internet and no cloud service is used.
 
-```bat
-cd "Car Brand Classifier"
-venv\Scripts\activate
-python infer.py path\to\photo.jpg
-```
-
-The default brand model is the DINOv2 + MobileNet ensemble (`candidate_v1_dinov2` + `candidate_v1_mobilenet`, 25 brands), set by `BRAND_MODEL_PATH` and `BRAND_ENSEMBLE_WEIGHTS` in `src/config.py`. Set `BRAND_MODEL_PATH` to a single checkpoint to run that model alone.
-
-Example output (`data\tashkent_test\IMG_20261023_164620.jpg`):
-
-```text
-Car 1: Chevrolet (71%) — grey (68%)   [detected 92%]
-Car 2: Lexus (21%) — white (79%)   [detected 91%]
-Car 3: Hyundai (35%) — black (72%)   [detected 90%]
-Car 4: Chevrolet (18%) — white (74%)   [detected 76%]
-```
-
-Brand % is the model's softmax probability. Colour % says how clearly the HSV rule decided (50% = right on a threshold, capped at 95%; not a calibrated probability).
-
-To select a specific brand checkpoint, or several to run as an equal-weight ensemble:
-
-```bat
-python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v1_mobilenet.pth
-python infer.py path\to\photo.jpg --brand-model models\car_brand_classifier_candidate_v1_dinov2.pth models\car_brand_classifier_candidate_v1_mobilenet.pth
-```
-
-For a single image that is already cropped to one car, skip YOLO explicitly:
-
-```bat
-python infer.py data\brand_dataset\BYD\image.png --crop
-```
-
-Normal street photos should not use `--crop`; YOLO is required to find and crop each vehicle.
-
-You can also pass a photo's filename by itself if it is stored somewhere under
-`data\`; if that filename occurs more than once, pass the full path instead.
-
-### Phone camera → laptop (recommended on test day)
-
-`serve.py` serves a small web page **from the laptop** on the local network. The phone only takes the photo and shows the answer; YOLO, the brand model and the colour rules all run on the laptop. No internet and no cloud service is used.
-
-1. Turn on the **phone's hotspot** and connect the laptop to it (no mobile data needed; the classroom Wi-Fi may block phone↔laptop traffic).
+1. Connect the laptop and the phone to the same network.
 2. On the laptop:
 
    ```bat
+   cd "Car Brand Classifier"
    venv\Scripts\activate
    python serve.py
    ```
@@ -66,21 +26,11 @@ You can also pass a photo's filename by itself if it is stored somewhere under
 3. Open that address in the phone's browser and tap **Take photo**. The phone's own camera opens; take the photo of the screen.
 4. The answer appears on the phone and in the laptop terminal within a few seconds, e.g. `Chevrolet white; Kia grey`, with each car's confidence and the photo with boxes. Write the answer line on the sheet.
 
-Every photo and its annotated result are saved in `outputs/live/`.
+Brand % is the model's softmax probability. Colour % says how clearly the HSV rule decided (50% = right on a threshold, capped at 95%; not a calibrated probability).
 
-**First run on a laptop:** Windows asks whether to allow Python on networks. Tick **Private** *and* **Public** (a phone hotspot is often treated as a public network), then **Allow**. If the phone still cannot open the page: Windows Security → Firewall & network protection → Allow an app through firewall → enable `python.exe` for both, or set the hotspot connection to *Private* in Settings → Network. Rehearse this once before test day.
+Every photo and its annotated result are saved in `outputs/live/`. Marking a car's brand or colour right or wrong on the page saves it to `outputs/live/feedback.csv`.
 
-Backup if the hotspot fails: send the photo to yourself in Telegram, save it on the laptop, and run `python infer.py path\to\photo.jpg`.
-
-Phone as webcam (SPACE classifies the frame, Q quits):
-
-```bat
-python infer.py --camera 0
-```
-
-```text
-BYD white; Chevrolet grey
-```
+**First run on a laptop:** Windows asks whether to allow Python on networks. Tick **Private** *and* **Public**, then **Allow**. If the phone still cannot open the page: Windows Security → Firewall & network protection → Allow an app through firewall → enable `python.exe` for both, or set the connection to *Private* in Settings → Network.
 
 `BRAND_UNKNOWN_THRESHOLD` is 0.00, so the model always names its best brand, even at low confidence. Raise it in `src/config.py` to print `unknown` below that confidence.
 
@@ -92,10 +42,10 @@ Python 3.10–3.12 is safest. This repo has also been used with a local 3.14 CPU
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-python infer.py data\tashkent_test\IMG_20261023_164608.jpg
+python serve.py
 ```
 
-`models\yolo11n-seg.pt` must be present **before** test day because the classroom has no network (the first detector run downloads it into `models\` automatically). 
+`models\yolo11n-seg.pt` must be present **before** test day because the classroom has no network (the first detector run downloads it into `models\` automatically).
 
 Weights:
 
@@ -106,7 +56,7 @@ Weights:
 - `models/color_names.json` — the eight colour labels
 - `models/car_color_classifier.pth` — not trained yet; HSV is used without it
 
-Earlier experiment checkpoints (the old v1–v5, `fixed`, `v4_reduced`, the YOLOv8n detector, and later `candidate_v1` and `candidate_v4_reduced`) were removed or replaced; tracked ones remain in git history. The numbering restarted at `candidate_v1` after the dataset was re-cleaned.
+The ensemble and its weights are set by `BRAND_MODEL_PATH` and `BRAND_ENSEMBLE_WEIGHTS` in `src/config.py`.
 
 ## Data
 
@@ -119,7 +69,7 @@ Brand folder names must match the badge in English: `Chevrolet`, `Daewoo`, `BYD`
 
 Removed brands: Audi, Ford, Jeep, Mitsubishi, Tesla, Toyota and Volkswagen are listed in `EXCLUDED_BRANDS` (`src/config.py`). Their image folders were deleted, `split_dataset.py` skips them, and the active model cannot predict them.
 
-Chinese-brand folders already exist under `data/brand_dataset/` (`BYD`, `Chery`, `Changan`, `Geely`, `Leapmotor`, …) but they were empty when the pipeline was wired. **Fill them.** Half of the live test is Chinese brands. Photograph dealer streets and new residential car parks, many angles, day and evening, and a few photos of a car on a screen (the live test is a phone pointed at a projector).
+Half of the live test is Chinese brands (`BYD`, `Chery`, `Changan`, `Geely`, `Leapmotor`, …). When adding photos, prefer many angles, day and evening, and some photos of a car on a screen (the live test is a phone pointed at a projector).
 
 Public sets (Stanford Cars, CompCars) are a supplement only — cite them in the report. Do not train only on those.
 
@@ -264,11 +214,11 @@ Remaining misses: black cars washed out by the screen with no dark pixels left (
 ## Repository layout
 
 ```text
-infer.py                     live-test entry point (photo file or webcam)
-serve.py                     phone-camera page served from the laptop (local network only)
+serve.py                     live-test phone page served from the laptop (local network only)
+infer.py                     command-line run on a photo file (not used in the live test)
 src/config.py                paths and thresholds
 src/detect.py                YOLO11n-seg car finder and outlines (YOLO11n / YOLOv8n fallback)
-src/brand_model.py           MobileNetV3-Small brand head
+src/brand_model.py           DINOv2 + MobileNetV3-Small brand ensemble
 src/color_model.py           colour classifier or HSV
 src/pipeline.py              ties the three stages together
 training/clean_brand_dataset.py
