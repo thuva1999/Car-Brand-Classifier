@@ -215,7 +215,6 @@ Remaining misses: black cars washed out by the screen with no dark pixels left (
 
 ```text
 serve.py                     live-test phone page served from the laptop (local network only)
-infer.py                     command-line run on a photo file (not used in the live test)
 src/config.py                paths and thresholds
 src/detect.py                YOLO11n-seg car finder and outlines (YOLO11n / YOLOv8n fallback)
 src/brand_model.py           DINOv2 + MobileNetV3-Small brand ensemble

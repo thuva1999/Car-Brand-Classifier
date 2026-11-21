@@ -12,7 +12,7 @@ frozen features already separate car makes well, so instead:
 2. Train only the linear head on the cached features (seconds), trying a few
    weight-decay values and keeping the best *balanced* validation accuracy.
 3. Save a normal checkpoint (architecture "dinov2_vits14") that
-   load_brand_model / serve.py / infer.py / evaluate.py load unchanged.
+   load_brand_model / serve.py / evaluate.py load unchanged.
 
 The feature cache lives in outputs/ and is reused when the split and settings
 have not changed, so re-running with other head settings is instant.
